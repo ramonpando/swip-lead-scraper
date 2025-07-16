@@ -1,14 +1,17 @@
 services:
   swip-scraper:
     build: .
-    container_name: swip-lead-scraper
     restart: unless-stopped
-    ports:
-      - "8000:8000"
     environment:
       - PYTHONPATH=/app
       - ENVIRONMENT=production
       - LOG_LEVEL=INFO
     volumes:
-      - ./downloads:/app/downloads
-      - ./logs:/app/logs
+      - downloads_data:/app/downloads
+      - logs_data:/app/logs
+    # No es necesario añadir la sección 'networks' aquí si usas la UI de Dokploy,
+    # ya que él se encarga de conectar el servicio a la red correcta.
+
+volumes:
+  downloads_data:
+  logs_data:
