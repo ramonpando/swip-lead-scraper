@@ -35,7 +35,27 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
-
+@app.post("/test-scraper")
+async def test_scraper(source: str = "google_maps"):
+    """Probar un scraper específico"""
+    try:
+        if source == "google_maps":
+            from scrapers.google_maps_scraper import GoogleMapsLeadScraper
+            scraper = GoogleMapsLeadScraper()
+            # Test con un restaurante en Querétaro
+            results = await scraper.test_single_search("Restaurantes", "Querétaro", 1)
+        else:
+            raise HTTPException(status_code=400, detail="Fuente no válida")
+        
+        return {
+            "source": source,
+            "test_results": results,
+            "status": "success" if results else "no_results"
+        }
+        
+    except Exception as e:
+        logger.error(f"Test scraper error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 # Configurar CORS
 app.add_middleware(
     CORSMiddleware,
