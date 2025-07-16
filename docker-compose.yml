@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  swip-scraper:
+    build: .
+    container_name: swip-lead-scraper
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./downloads:/app/downloads
+      - ./logs:/app/logs
+    networks:
+      - dokploy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+networks:
+  dokploy:
+    external: true
