@@ -239,20 +239,19 @@ async def get_job_results(job_id: str):
                 "job_id": job_id,
                 "status": "failed",
                 "message": "Job falló"
-            } 
-     elif job["status"] == "completed":
-    results = job.get("results", [])
-    # Manejo seguro de None
-    if results is None:
-        results = []
-    
-    return {
-        "job_id": job_id,
-        "status": "completed",
-        "total_leads": len(results),
-        "leads": results,
-        "debug_results_type": str(type(results))
-    }
+            }
+        elif job["status"] == "completed":
+            results = job.get("results", [])
+            if results is None:
+                results = []
+            
+            return {
+                "job_id": job_id,
+                "status": "completed",
+                "total_leads": len(results),
+                "leads": results,
+                "debug_results_type": str(type(results))
+            }
         
     except HTTPException:
         raise
