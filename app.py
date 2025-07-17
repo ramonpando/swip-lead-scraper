@@ -239,7 +239,7 @@ async def get_job_results(job_id: str):
             return {
                 "job_id": job_id,
                 "status": "completed",
-                "total_leads": len(results),
+                "total_leads": len(results) if results else 0,
                 "leads": results
             }
         
