@@ -167,34 +167,56 @@ class GoogleMapsLeadScraper:
             return []
 
     async def _extract_google_results(self, max_results: int) -> List[Dict]:
-        """Extraer resultados de Google"""
-        businesses = []
+    """Extraer resultados de Google"""
+    businesses = []
+    
+    try:
+        # DEBUG: Capturar página completa
+        page_source = self.driver.page_source
+        logger.info(f"🔍 Página contiene: {len(page_source)} caracteres")
         
-        try:
-            # Buscar elementos de resultados
-            result_elements = self.driver.find_elements(By.CSS_SELECTOR, 'div.g')
-            
-            logger.info(f"📊 Encontrados {len(result_elements)} resultados")
-            
-            for i, element in enumerate(result_elements[:max_results * 2]):
-                try:
-                    business_data = await self._extract_business_info(element)
-                    
-                    if business_data:
-                        businesses.append(business_data)
-                        logger.info(f"✅ Negocio {i+1}: {business_data.get('name', 'Sin nombre')}")
-                    
-                    if len(businesses) >= max_results:
-                        break
-                        
-                except Exception as e:
-                    logger.warning(f"Error extrayendo negocio {i+1}: {e}")
-                    continue
-            
-        except Exception as e:
-            logger.error(f"Error en extracción: {e}")
+        # DEBUG: Buscar diferentes selectores
+        selectors_to_try = [
+            'div.g',
+            'div.tF2Cxc',
+            'div.MjjYud',
+            'div[data-ved]',
+            'div.yuRUbf'
+        ]
         
-        return businesses
+        result_elements = []
+        for selector in selectors_to_try:
+            elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+            if elements:
+                logger.info(f"🔍 Selector {selector} encontró {len(elements)} elementos")
+                result_elements = elements
+                break
+        
+        if not result_elements:
+            logger.warning("❌ No se encontraron elementos con ningún selector")
+            return []
+        
+        logger.info(f"📊 Encontrados {len(result_elements)} resultados")
+        
+        for i, element in enumerate(result_elements[:max_results * 2]):
+            try:
+                business_data = await self._extract_business_info(element)
+                
+                if business_data:
+                    businesses.append(business_data)
+                    logger.info(f"✅ Negocio {i+1}: {business_data.get('name', 'Sin nombre')}")
+                
+                if len(businesses) >= max_results:
+                    break
+                    
+            except Exception as e:
+                logger.warning(f"Error extrayendo negocio {i+1}: {e}")
+                continue
+        
+    except Exception as e:
+        logger.error(f"Error en extracción: {e}")
+    
+    return businesses
 
     async def _extract_business_info(self, element) -> Optional[Dict]:
         """Extraer información del negocio"""
