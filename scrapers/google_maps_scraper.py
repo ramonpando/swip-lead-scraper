@@ -64,59 +64,36 @@ class GoogleMapsLeadScraper:
         }
 
     def setup_driver(self):
-        """Configura Chrome con undetected-chromedriver"""
-        try:
-            # Configurar opciones de Chrome
-            options = uc.ChromeOptions()
-            
-            # Configuraciones anti-detección
-            options.add_argument('--no-sandbox')
-            options.add_argument('--disable-dev-shm-usage')
-            options.add_argument('--disable-blink-features=AutomationControlled')
-            options.add_argument('--disable-extensions')
-            options.add_argument('--disable-plugins')
-            options.add_argument('--disable-images')
-            options.add_argument('--disable-javascript')
-            options.add_argument('--window-size=1920,1080')
-            options.add_argument('--start-maximized')
-            
-            # User agent mexicano
-            options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-            
-            # Preferencias adicionales
-            prefs = {
-                "profile.default_content_setting_values": {
-                    "notifications": 2,
-                    "images": 2,
-                    "javascript": 2,
-                    "plugins": 2,
-                    "popups": 2,
-                    "geolocation": 2,
-                    "media_stream": 2,
-                }
-            }
-            options.add_experimental_option("prefs", prefs)
-            
-            # Excluir switches de automatización
-            options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            options.add_experimental_option('useAutomationExtension', False)
-            
-            # Crear driver undetected
-            self.driver = uc.Chrome(options=options)
-            
-            # Ejecutar JavaScript para eliminar webdriver property
-            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-            
-            # Configurar timeouts
-            self.driver.set_page_load_timeout(30)
-            self.driver.implicitly_wait(10)
-            
-            logger.info("✅ Chrome undetected driver configurado exitosamente")
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ Error configurando driver: {e}")
-            return False
+    """Configura Chrome con undetected-chromedriver"""
+    try:
+        # Configurar opciones básicas
+        options = uc.ChromeOptions()
+        
+        # Configuraciones básicas que SÍ funcionan
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--disable-gpu')
+        options.add_argument('--window-size=1920,1080')
+        options.add_argument('--disable-extensions')
+        options.add_argument('--disable-plugins')
+        options.add_argument('--disable-images')
+        
+        # User agent
+        options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+        
+        # Crear driver undetected (versión simple)
+        self.driver = uc.Chrome(options=options, version_main=120)
+        
+        # Configurar timeouts
+        self.driver.set_page_load_timeout(30)
+        self.driver.implicitly_wait(10)
+        
+        logger.info("✅ Chrome undetected driver configurado exitosamente")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Error configurando driver: {e}")
+        return False
 
     def test_connection(self) -> bool:
         """Testa la conexión"""
