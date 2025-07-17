@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Scraper simple para Sección Amarilla
+Scraper Sección Amarilla - Selectores corregidos para estructura real
 """
 
 import asyncio
@@ -17,7 +17,7 @@ import re
 logger = logging.getLogger(__name__)
 
 class GoogleMapsLeadScraper:
-    """Mantener compatibilidad con nombre original"""
+    """Scraper para Sección Amarilla con selectores corregidos"""
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
@@ -44,17 +44,13 @@ class GoogleMapsLeadScraper:
         try:
             logger.info(f"🔥 Iniciando scraping: {sector} en {location}")
             
-            # Construir URL de Sección Amarilla
-            base_url = "https://www.seccionamarilla.com.mx/resultados"
-            # Limpiar y formatear términos
-            sector_clean = sector.replace(' ', '-').lower()
-            location_clean = location.replace(' ', '-').lower()
-            
-            # URL de prueba por defecto
+            # URL de Sección Amarilla
             if "marketing" in sector.lower():
                 url = "https://www.seccionamarilla.com.mx/resultados/agencias-de-marketing/distrito-federal/zona-metropolitana/1"
             else:
-                url = f"{base_url}/{sector_clean}/{location_clean}/1"
+                sector_clean = sector.replace(' ', '-').lower()
+                location_clean = location.replace(' ', '-').lower()
+                url = f"https://www.seccionamarilla.com.mx/resultados/{sector_clean}/{location_clean}/1"
             
             logger.info(f"📍 URL a scrapear: {url}")
             
@@ -65,43 +61,35 @@ class GoogleMapsLeadScraper:
             soup = BeautifulSoup(response.content, 'html.parser')
             leads = []
             
-            # Estrategia 1: Buscar en contenedores div
-            containers = soup.find_all('div', class_='container_out')
-            logger.info(f"📦 Containers encontrados: {len(containers)}")
+            # ESTRATEGIA CORREGIDA: Buscar elementos de negocio individuales
             
-            if not containers:
-                # Estrategia 2: Buscar otros contenedores
-                containers = soup.find_all('div', class_=['result-item', 'listing', 'business-info'])
-                logger.info(f"📦 Containers alternativos: {len(containers)}")
+            # Método 1: Buscar por estructura de tabla/filas
+            business_rows = soup.find_all('tr')
+            logger.info(f"📋 Filas encontradas: {len(business_rows)}")
             
-            if not containers:
-                # Estrategia 3: Buscar en tabla
-                table_rows = soup.find_all('tr')
-                logger.info(f"📋 Filas de tabla: {len(table_rows)}")
-                
-                for row in table_rows[:max_leads]:
-                    lead = self._extract_from_table_row(row)
-                    if lead:
-                        leads.append(lead)
+            for row in business_rows:
+                lead = self._extract_from_business_row(row)
+                if lead and len(leads) < max_leads:
+                    leads.append(lead)
+                    logger.info(f"✅ Lead extraído: {lead.get('name', 'Sin nombre')}")
             
-            # Procesar containers
-            for i, container in enumerate(containers[:max_leads]):
-                try:
-                    lead = self._extract_lead_from_container(container, i)
-                    if lead:
-                        leads.append(lead)
-                        logger.info(f"✅ Lead extraído: {lead.get('name', 'Sin nombre')}")
-                    
-                    # Delay entre extracciones
-                    await asyncio.sleep(0.5)
-                    
-                except Exception as e:
-                    logger.error(f"❌ Error extrayendo lead {i}: {e}")
-                    continue
-            
-            # Si no hay leads, intentar extracción general
+            # Método 2: Buscar contenedores con nombres de empresas
             if not leads:
-                leads = self._extract_general_info(soup, max_leads)
+                # Buscar elementos que contengan nombres de empresas
+                potential_names = soup.find_all(text=True)
+                phone_elements = soup.find_all(string=re.compile(r'\(\d{2,3}\)\d{3,4}-?\d{4}|\d{10}'))
+                
+                logger.info(f"📞 Elementos con teléfonos: {len(phone_elements)}")
+                
+                # Extraer información de elementos vecinos a teléfonos
+                for phone_elem in phone_elements:
+                    lead = self._extract_from_phone_context(phone_elem, soup)
+                    if lead and len(leads) < max_leads:
+                        leads.append(lead)
+            
+            # Método 3: Buscar por patrones específicos de la página
+            if not leads:
+                leads = self._extract_by_patterns(soup, max_leads)
             
             logger.info(f"🎯 Total leads extraídos: {len(leads)}")
             return leads
@@ -110,169 +98,222 @@ class GoogleMapsLeadScraper:
             logger.error(f"❌ Error en scraping: {e}")
             return []
 
-    def _extract_lead_from_container(self, container, index: int) -> Optional[Dict]:
-        """Extraer información de un contenedor"""
+    def _extract_from_business_row(self, row) -> Optional[Dict]:
+        """Extraer de fila de negocio"""
         try:
-            text = container.get_text(strip=True)
-            
-            # Buscar nombre
-            name = self._extract_name(container, text)
-            
-            # Buscar teléfono
-            phone = self._extract_phone(text)
-            
-            # Buscar email
-            email = self._extract_email(text)
-            
-            # Buscar dirección
-            address = self._extract_address(container, text)
-            
-            # Solo devolver si tenemos al menos nombre y contacto
-            if name and (phone or email):
-                return {
-                    'name': name,
-                    'phone': phone,
-                    'email': email,
-                    'address': address,
-                    'sector': 'Sección Amarilla',
-                    'location': 'México',
-                    'source': 'seccion_amarilla',
-                    'credit_potential': 'ALTO',
-                    'estimated_revenue': '$200,000 - $500,000',
-                    'loan_range': '$50,000 - $1,200,000',
-                    'extracted_at': datetime.now().isoformat(),
-                    'debug_results_type': f'<class "container_{index}">'
-                }
-            
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error extrayendo de contenedor: {e}")
-            return None
-
-    def _extract_from_table_row(self, row) -> Optional[Dict]:
-        """Extraer información de fila de tabla"""
-        try:
+            # Buscar celdas de la fila
             cells = row.find_all(['td', 'th'])
             if len(cells) < 2:
                 return None
             
-            text = row.get_text(strip=True)
+            row_text = row.get_text(strip=True)
             
-            # Buscar información
+            # Skip filas de encabezado o navegación
+            skip_keywords = ['nombre', 'estatus', 'acciones', 'encuentra los mejores', 'buscar']
+            if any(keyword in row_text.lower() for keyword in skip_keywords):
+                return None
+            
+            # Buscar nombre de empresa en la primera celda significativa
             name = None
-            phone = self._extract_phone(text)
-            email = self._extract_email(text)
-            
-            # Buscar nombre en las celdas
             for cell in cells:
                 cell_text = cell.get_text(strip=True)
-                if len(cell_text) > 5 and not cell_text.lower() in ['abierto', 'cerrado', 'compartir', 'ruta']:
-                    name = cell_text[:100]
+                # Buscar texto que parezca nombre de empresa
+                if (len(cell_text) > 3 and 
+                    not cell_text.lower() in ['abierto', 'cerrado'] and
+                    not cell_text.startswith('AV.') and
+                    not cell_text.startswith('CALLE') and
+                    not re.match(r'\(\d+\)', cell_text)):
+                    
+                    name = cell_text
                     break
             
-            if name and (phone or email):
+            # Buscar teléfono
+            phone = self._extract_phone(row_text)
+            
+            # Buscar dirección
+            address = self._extract_address_from_row(row)
+            
+            if name and phone and len(name) > 3:
                 return {
                     'name': name,
                     'phone': phone,
-                    'email': email,
-                    'address': text[:200],
-                    'sector': 'Sección Amarilla',
-                    'location': 'México',
+                    'email': None,
+                    'address': address,
+                    'sector': 'Marketing/Publicidad',
+                    'location': 'México, DF',
                     'source': 'seccion_amarilla',
                     'credit_potential': 'ALTO',
                     'estimated_revenue': '$200,000 - $500,000',
                     'loan_range': '$50,000 - $1,200,000',
                     'extracted_at': datetime.now().isoformat(),
-                    'debug_results_type': '<class "table_row">'
+                    'debug_results_type': '<class "business_row">'
                 }
             
             return None
             
         except Exception as e:
-            logger.error(f"Error extrayendo de tabla: {e}")
+            logger.error(f"Error extrayendo de fila: {e}")
             return None
 
-    def _extract_general_info(self, soup, max_leads: int) -> List[Dict]:
-        """Extracción general cuando fallan otras estrategias"""
+    def _extract_from_phone_context(self, phone_element, soup) -> Optional[Dict]:
+        """Extraer información del contexto del teléfono"""
+        try:
+            # Encontrar el contenedor padre del teléfono
+            parent = phone_element.parent
+            while parent and parent.name != 'tr':
+                parent = parent.parent
+                if parent is None:
+                    break
+            
+            if not parent:
+                return None
+            
+            # Extraer información de la fila/contenedor
+            container_text = parent.get_text(strip=True)
+            phone = self._extract_phone(container_text)
+            
+            # Buscar nombre en elementos hermanos o padres
+            name = self._find_business_name_near_phone(parent)
+            
+            if name and phone:
+                return {
+                    'name': name,
+                    'phone': phone,
+                    'email': None,
+                    'address': container_text[:100],
+                    'sector': 'Marketing/Publicidad',
+                    'location': 'México, DF',
+                    'source': 'seccion_amarilla',
+                    'credit_potential': 'ALTO',
+                    'estimated_revenue': '$200,000 - $500,000',
+                    'loan_range': '$50,000 - $1,200,000',
+                    'extracted_at': datetime.now().isoformat(),
+                    'debug_results_type': '<class "phone_context">'
+                }
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error extrayendo de contexto: {e}")
+            return None
+
+    def _extract_by_patterns(self, soup, max_leads: int) -> List[Dict]:
+        """Extraer por patrones específicos de la página"""
         leads = []
         
         try:
-            # Buscar todos los textos que parezcan nombres de empresas
-            all_text = soup.get_text()
+            # Buscar todos los enlaces de teléfono
+            phone_links = soup.find_all('a', href=re.compile(r'tel:'))
             
-            # Buscar patrones de teléfono
-            phone_pattern = r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b|\b\(\d{3}\)\s*\d{3}[-.]?\d{4}\b'
-            phones = re.findall(phone_pattern, all_text)
-            
-            # Buscar patrones de email
-            email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-            emails = re.findall(email_pattern, all_text)
-            
-            # Crear leads básicos con la información encontrada
-            for i, phone in enumerate(phones[:max_leads]):
-                if phone and not phone.startswith('998'):  # Filtrar teléfonos de ejemplo
-                    leads.append({
-                        'name': f'Empresa {i+1}',
-                        'phone': phone,
-                        'email': emails[i] if i < len(emails) else None,
-                        'address': 'México, DF',
-                        'sector': 'Sección Amarilla',
-                        'location': 'México',
-                        'source': 'seccion_amarilla',
-                        'credit_potential': 'MEDIO',
-                        'estimated_revenue': '$100,000 - $300,000',
-                        'loan_range': '$25,000 - $800,000',
-                        'extracted_at': datetime.now().isoformat(),
-                        'debug_results_type': '<class "general_extraction">'
-                    })
+            for link in phone_links[:max_leads]:
+                phone = link.get('href').replace('tel:', '').strip()
+                
+                # Buscar el nombre en el contexto del enlace
+                container = link.find_parent(['tr', 'div', 'td'])
+                if container:
+                    name = self._find_business_name_in_container(container)
+                    
+                    if name and phone:
+                        leads.append({
+                            'name': name,
+                            'phone': phone,
+                            'email': None,
+                            'address': container.get_text(strip=True)[:100],
+                            'sector': 'Marketing/Publicidad',
+                            'location': 'México, DF',
+                            'source': 'seccion_amarilla',
+                            'credit_potential': 'ALTO',
+                            'estimated_revenue': '$200,000 - $500,000',
+                            'loan_range': '$50,000 - $1,200,000',
+                            'extracted_at': datetime.now().isoformat(),
+                            'debug_results_type': '<class "phone_link_pattern">'
+                        })
             
         except Exception as e:
-            logger.error(f"Error en extracción general: {e}")
+            logger.error(f"Error en extracción por patrones: {e}")
         
         return leads
 
-    def _extract_name(self, container, text: str) -> Optional[str]:
-        """Extraer nombre de empresa"""
-        # Buscar en títulos
-        title_elements = container.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a'])
-        for elem in title_elements:
-            elem_text = elem.get_text(strip=True)
-            if len(elem_text) > 3 and not elem_text.lower() in ['abierto', 'cerrado', 'compartir', 'ruta', 'más información']:
-                return elem_text[:100]
+    def _find_business_name_near_phone(self, container) -> Optional[str]:
+        """Encontrar nombre de negocio cerca del teléfono"""
+        try:
+            # Buscar en el mismo contenedor
+            text_nodes = container.find_all(text=True)
+            
+            for text in text_nodes:
+                text = text.strip()
+                # Buscar texto que parezca nombre de empresa
+                if (len(text) > 3 and 
+                    not re.match(r'^\(\d+\)', text) and
+                    not text.lower() in ['abierto', 'cerrado', 'whatsapp'] and
+                    not text.startswith('AV.') and
+                    not text.startswith('CALLE')):
+                    
+                    return text[:50]  # Limitar longitud
+            
+            return None
+            
+        except Exception as e:
+            return None
+
+    def _find_business_name_in_container(self, container) -> Optional[str]:
+        """Encontrar nombre de negocio en contenedor"""
+        try:
+            # Buscar en elementos de texto prominente
+            for tag in ['h1', 'h2', 'h3', 'h4', 'strong', 'b']:
+                elem = container.find(tag)
+                if elem:
+                    text = elem.get_text(strip=True)
+                    if len(text) > 3:
+                        return text[:50]
+            
+            # Buscar en texto general
+            texts = container.find_all(text=True)
+            for text in texts:
+                text = text.strip()
+                if (len(text) > 3 and 
+                    not re.match(r'^\(\d+\)', text) and
+                    not text.lower() in ['abierto', 'cerrado'] and
+                    not text.startswith('AV.')):
+                    
+                    return text[:50]
+            
+            return None
+            
+        except Exception as e:
+            return None
+
+    def _extract_phone(self, text: str) -> Optional[str]:
+        """Extraer teléfono del texto"""
+        # Patrones de teléfono mexicano
+        patterns = [
+            r'\(\d{2,3}\)\d{3,4}-?\d{4}',  # (55)1234-5678
+            r'\d{10}',  # 5512345678
+            r'\d{3}[-.\s]?\d{3}[-.\s]?\d{4}',  # 555-123-4567
+        ]
         
-        # Buscar en primera línea significativa
-        lines = [line.strip() for line in text.split('\n') if line.strip()]
-        for line in lines[:3]:  # Revisar primeras 3 líneas
-            if len(line) > 3 and not line.lower() in ['abierto', 'cerrado', 'compartir', 'ruta']:
-                return line[:100]
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                return match.group()
         
         return None
 
-    def _extract_phone(self, text: str) -> Optional[str]:
-        """Extraer teléfono"""
-        phone_pattern = r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b|\b\(\d{3}\)\s*\d{3}[-.]?\d{4}\b'
-        match = re.search(phone_pattern, text)
-        return match.group() if match else None
-
-    def _extract_email(self, text: str) -> Optional[str]:
-        """Extraer email"""
-        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-        match = re.search(email_pattern, text)
-        return match.group() if match else None
-
-    def _extract_address(self, container, text: str) -> Optional[str]:
-        """Extraer dirección"""
-        # Buscar patrones de dirección
-        address_indicators = ['c.p.', 'cp', 'col.', 'colonia', 'df', 'cdmx', 'méxico']
-        lines = text.split('\n')
-        
-        for line in lines:
-            line_lower = line.lower()
-            if any(indicator in line_lower for indicator in address_indicators):
-                return line.strip()[:200]
-        
-        return text[:100] if text else None
+    def _extract_address_from_row(self, row) -> Optional[str]:
+        """Extraer dirección de la fila"""
+        try:
+            cells = row.find_all(['td', 'th'])
+            
+            # Buscar celda que contenga dirección
+            for cell in cells:
+                text = cell.get_text(strip=True)
+                if any(indicator in text.upper() for indicator in ['AV.', 'CALLE', 'COL.', 'BENITO', 'JUAREZ']):
+                    return text[:100]
+            
+            return None
+            
+        except Exception as e:
+            return None
 
 # Función para compatibilidad
 def scrape_seccion_amarilla(url):
@@ -284,7 +325,6 @@ def scrape_seccion_amarilla(url):
     asyncio.set_event_loop(loop)
     
     try:
-        # Extraer parámetros de la URL
         if 'marketing' in url:
             sector = 'agencias de marketing'
             location = 'distrito federal'
