@@ -244,24 +244,87 @@ class GoogleMapsLeadScraper:
             return None
 
 # Función para compatibilidad con el sistema existente
+# SOLO CAMBIAR ESTA FUNCIÓN en scrapers/seccion_amarilla_simple.py
+
 def scrape_seccion_amarilla(url):
-    """Función compatible con el sistema existente"""
+    """Función de compatibilidad - USAR URL REAL"""
     scraper = GoogleMapsLeadScraper()
     
-    # Ejecutar scraping síncrono
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
     try:
-        # Extraer parámetros de la URL o usar defaults
-        if 'marketing' in url:
-            sector = 'agencias de marketing'
-            location = 'distrito federal'
-        else:
-            sector = 'empresas'
-            location = 'méxico'
+        # IMPORTANTE: Usar la URL real que viene del request
+        logger.info(f"🎯 URL recibida: {url}")
         
-        results = loop.run_until_complete(scraper.scrape_leads(sector, location, 10))
+        # NUEVA LÓGICA: Pasar la URL real al scraper
+        results = loop.run_until_complete(scraper.scrape_leads_from_url(url, 10))
         return results
     finally:
         loop.close()
+
+# Y AGREGAR ESTE MÉTODO a la clase GoogleMapsLeadScraper:
+
+async def scrape_leads_from_url(self, url: str, max_leads: int = 10) -> List[Dict]:
+    """Scrapear desde URL específica"""
+    try:
+        logger.info(f"🔥 Scraping URL específica: {url}")
+        
+        # USAR LA URL TAL COMO VIENE - NO HARDCODED
+        response = self.session.get(url, timeout=30)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        leads = []
+        
+        # Determinar sector basado en URL
+        sector = self._extract_sector_from_url(url)
+        
+        # Buscar en filas de tabla
+        business_rows = soup.find_all('tr')
+        logger.info(f"📋 Filas encontradas: {len(business_rows)}")
+        
+        for row in business_rows:
+            lead = self._extract_from_business_row(row, sector)
+            if lead and len(leads) < max_leads:
+                leads.append(lead)
+                logger.info(f"✅ Lead extraído: {lead.get('name', 'Sin nombre')}")
+        
+        logger.info(f"🎯 Total leads de {sector}: {len(leads)}")
+        return leads
+        
+    except Exception as e:
+        logger.error(f"❌ Error scraping {url}: {e}")
+        return []
+
+def _extract_sector_from_url(self, url: str) -> str:
+    """Extraer sector de la URL"""
+    if 'contadores' in url:
+        return 'Contadores'
+    elif 'abogados' in url:
+        return 'Abogados'
+    elif 'marketing' in url:
+        return 'Marketing'
+    elif 'arquitectos' in url:
+        return 'Arquitectos'
+    else:
+        return 'Servicios Profesionales'
+
+def _extract_from_business_row(self, row, sector: str) -> Optional[Dict]:
+    """Actualizar para usar sector dinámico"""
+    # ... código existente hasta la parte del return ...
+    if name and phone and len(name) > 3:
+        return {
+            'name': name,
+            'phone': phone,
+            'email': None,
+            'address': address or "México, DF",
+            'sector': sector,  # <-- USAR SECTOR DINÁMICO
+            'location': 'México, DF',
+            'source': 'seccion_amarilla',
+            'credit_potential': 'ALTO',
+            'estimated_revenue': '$200,000 - $500,000',
+            'loan_range': '$50,000 - $1,200,000',
+            'extracted_at': datetime.now().isoformat(),
+            'debug_results_type': f'<class "business_row_{sector}">'  # <-- INCLUIR SECTOR
+        }
