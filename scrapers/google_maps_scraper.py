@@ -1,381 +1,384 @@
 #!/usr/bin/env python3
 """
-Google Maps Lead Scraper - VERSIÓN ANTI-DETECCIÓN
-Scraper robusto que burla protecciones de Google
+Google Maps Lead Scraper - SELENIUM REAL
+Scraper profesional para leads PyME reales - 3M pesos mensuales
 """
 
 import asyncio
 import time
 import random
 from typing import List, Dict, Optional
-import requests
-from bs4 import BeautifulSoup
 import logging
 from datetime import datetime
 import re
-from urllib.parse import quote_plus
-import json
+import os
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+import undetected_chromedriver as uc
+from webdriver_manager.chrome import ChromeDriverManager
 
 logger = logging.getLogger(__name__)
 
 class GoogleMapsLeadScraper:
     def __init__(self):
-        self.session = requests.Session()
+        self.driver = None
         self.leads = []
         
-        # User agents rotativos
-        self.user_agents = [
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0'
-        ]
-        
-        # Configurar headers iniciales
-        self.update_headers()
-        
-        # Sectores específicos para México
-        self.sector_terms = {
+        # Sectores específicos para créditos PyME
+        self.sector_queries = {
             "Restaurantes": [
-                "restaurante cerca de mi",
-                "comida mexicana",
-                "tacos",
-                "cocina tradicional"
+                "restaurante Querétaro", 
+                "comida Querétaro", 
+                "tacos Querétaro",
+                "cocina mexicana Querétaro"
             ],
             "Talleres": [
-                "taller mecánico",
-                "reparación autos",
-                "servicio automotriz",
-                "mecánico"
+                "taller mecánico Querétaro",
+                "reparación autos Querétaro", 
+                "servicio automotriz Querétaro",
+                "hojalatería Querétaro"
             ],
             "Comercio": [
-                "tienda",
-                "comercio local",
-                "negocio",
-                "establecimiento"
+                "tienda Querétaro",
+                "comercio Querétaro",
+                "negocio local Querétaro",
+                "boutique Querétaro"
             ],
             "Servicios": [
-                "servicios locales",
-                "negocio de servicios",
-                "empresa de servicios",
-                "servicio profesional"
+                "servicios Querétaro",
+                "estética Querétaro",
+                "salón belleza Querétaro",
+                "barbería Querétaro"
             ],
             "Producción": [
-                "panadería",
-                "producción local",
-                "manufactura",
-                "fábrica pequeña"
+                "panadería Querétaro",
+                "tortillería Querétaro",
+                "producción Querétaro",
+                "manufactura Querétaro"
             ]
         }
 
-    def update_headers(self):
-        """Actualiza headers con user agent aleatorio"""
-        user_agent = random.choice(self.user_agents)
-        self.session.headers.update({
-            'User-Agent': user_agent,
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'es-MX,es;q=0.9,en;q=0.8',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'DNT': '1',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Cache-Control': 'max-age=0'
-        })
+    def setup_driver(self):
+        """Configura Chrome con undetected-chromedriver"""
+        try:
+            # Configurar opciones de Chrome
+            options = uc.ChromeOptions()
+            
+            # Configuraciones anti-detección
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
+            options.add_argument('--disable-blink-features=AutomationControlled')
+            options.add_argument('--disable-extensions')
+            options.add_argument('--disable-plugins')
+            options.add_argument('--disable-images')
+            options.add_argument('--disable-javascript')
+            options.add_argument('--window-size=1920,1080')
+            options.add_argument('--start-maximized')
+            
+            # User agent mexicano
+            options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+            
+            # Preferencias adicionales
+            prefs = {
+                "profile.default_content_setting_values": {
+                    "notifications": 2,
+                    "images": 2,
+                    "javascript": 2,
+                    "plugins": 2,
+                    "popups": 2,
+                    "geolocation": 2,
+                    "media_stream": 2,
+                }
+            }
+            options.add_experimental_option("prefs", prefs)
+            
+            # Excluir switches de automatización
+            options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            options.add_experimental_option('useAutomationExtension', False)
+            
+            # Crear driver undetected
+            self.driver = uc.Chrome(options=options)
+            
+            # Ejecutar JavaScript para eliminar webdriver property
+            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            
+            # Configurar timeouts
+            self.driver.set_page_load_timeout(30)
+            self.driver.implicitly_wait(10)
+            
+            logger.info("✅ Chrome undetected driver configurado exitosamente")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error configurando driver: {e}")
+            return False
 
     def test_connection(self) -> bool:
         """Testa la conexión"""
         try:
-            self.update_headers()
-            response = self.session.get("https://www.google.com", timeout=15)
-            return response.status_code == 200
+            if not self.setup_driver():
+                return False
+            
+            # Probar acceso a Google
+            self.driver.get("https://www.google.com")
+            time.sleep(3)
+            
+            # Verificar que cargó correctamente
+            title = self.driver.title
+            self.cleanup_driver()
+            
+            return "google" in title.lower()
+            
         except Exception as e:
             logger.error(f"Test connection failed: {e}")
+            self.cleanup_driver()
             return False
 
     async def test_single_search(self, sector: str, location: str, max_results: int = 1) -> List[Dict]:
         """Test con una búsqueda real"""
         try:
-            # Usar búsqueda directa en Google
-            query = f"{sector} {location} teléfono"
-            results = await self._search_google_directly(query, max_results)
+            if not self.setup_driver():
+                return []
+            
+            # Buscar en Google Maps
+            query = f"{sector} {location}"
+            results = await self._search_google_maps_real(query, max_results)
+            
+            self.cleanup_driver()
             return results
             
         except Exception as e:
             logger.error(f"Test search failed: {e}")
+            self.cleanup_driver()
             return []
 
     async def scrape_leads(self, sector: str, location: str, max_leads: int = 10) -> List[Dict]:
-        """Scraping principal REAL"""
+        """Scraping principal para leads REALES"""
         try:
             logger.info(f"🎯 Iniciando scraping REAL: {sector} en {location}")
             
+            if not self.setup_driver():
+                return []
+            
             all_leads = []
-            terms = self.sector_terms.get(sector, [sector])
+            queries = self.sector_queries.get(sector, [f"{sector} {location}"])
             
-            # Usar múltiples fuentes
-            sources = [
-                self._search_google_directly,
-                self._search_google_maps_alternative,
-                self._search_business_listings
-            ]
+            # Ejecutar múltiples búsquedas
+            for query in queries[:3]:  # Máximo 3 búsquedas por sector
+                try:
+                    logger.info(f"🔍 Ejecutando búsqueda: {query}")
+                    
+                    # Buscar en Google Maps
+                    leads_batch = await self._search_google_maps_real(query, max_leads // 3)
+                    
+                    if leads_batch:
+                        all_leads.extend(leads_batch)
+                        logger.info(f"✅ Encontrados {len(leads_batch)} leads en {query}")
+                    
+                    # Pausa entre búsquedas
+                    await asyncio.sleep(random.uniform(5, 10))
+                    
+                    if len(all_leads) >= max_leads:
+                        break
+                        
+                except Exception as e:
+                    logger.error(f"❌ Error en búsqueda {query}: {e}")
+                    continue
             
-            # Probar 2 términos con 2 fuentes cada uno
-            for term in terms[:2]:
-                for source_func in sources[:2]:
-                    try:
-                        search_query = f"{term} {location} contacto"
-                        
-                        logger.info(f"🔍 Buscando: {search_query} con {source_func.__name__}")
-                        
-                        leads_batch = await source_func(search_query, max_leads // 4)
-                        
-                        if leads_batch:
-                            all_leads.extend(leads_batch)
-                            logger.info(f"✅ Encontrados {len(leads_batch)} leads")
-                        
-                        # Pausa entre búsquedas
-                        await asyncio.sleep(random.uniform(3, 8))
-                        
-                        if len(all_leads) >= max_leads:
-                            break
-                            
-                    except Exception as e:
-                        logger.error(f"❌ Error en fuente {source_func.__name__}: {e}")
-                        continue
-                
-                if len(all_leads) >= max_leads:
-                    break
+            self.cleanup_driver()
             
             # Procesar y filtrar leads
             processed_leads = self._process_leads(all_leads, sector, location)
             
-            logger.info(f"✅ Scraping completado: {len(processed_leads)} leads válidos")
+            logger.info(f"✅ Scraping completado: {len(processed_leads)} leads procesados")
             return processed_leads[:max_leads]
             
         except Exception as e:
-            logger.error(f"❌ Error en scraping: {e}")
+            logger.error(f"❌ Error general en scraping: {e}")
+            self.cleanup_driver()
             return []
 
-    async def _search_google_directly(self, query: str, max_results: int) -> List[Dict]:
-        """Búsqueda directa en Google"""
+    async def _search_google_maps_real(self, query: str, max_results: int) -> List[Dict]:
+        """Búsqueda REAL en Google Maps"""
         try:
-            self.update_headers()
+            # Ir a Google Maps
+            self.driver.get("https://www.google.com/maps")
             
-            # URL de búsqueda
-            search_url = f"https://www.google.com/search?q={quote_plus(query)}&num={max_results * 2}"
+            # Esperar a que cargue
+            await asyncio.sleep(random.uniform(3, 6))
             
-            # Simular comportamiento humano
-            await asyncio.sleep(random.uniform(2, 5))
+            # Buscar caja de búsqueda
+            search_box = WebDriverWait(self.driver, 15).until(
+                EC.presence_of_element_located((By.ID, "searchboxinput"))
+            )
             
-            response = self.session.get(search_url, timeout=20)
+            # Escribir búsqueda de forma humana
+            search_box.clear()
+            for char in query:
+                search_box.send_keys(char)
+                await asyncio.sleep(random.uniform(0.05, 0.15))
             
-            if response.status_code != 200:
-                logger.warning(f"HTTP {response.status_code} para Google search")
-                return []
+            # Buscar botón de búsqueda
+            search_button = WebDriverWait(self.driver, 10).until(
+                EC.element_to_be_clickable((By.ID, "searchbox-searchbutton"))
+            )
+            search_button.click()
             
-            soup = BeautifulSoup(response.content, 'html.parser')
+            # Esperar resultados
+            await asyncio.sleep(random.uniform(5, 8))
+            
+            # Scroll para cargar más resultados
+            await self._scroll_results()
             
             # Extraer resultados
-            results = await self._extract_from_google_results(soup, max_results)
+            results = await self._extract_maps_results(max_results)
             
             return results
             
         except Exception as e:
-            logger.error(f"Error en búsqueda directa Google: {e}")
+            logger.error(f"Error en búsqueda Maps: {e}")
             return []
 
-    async def _search_google_maps_alternative(self, query: str, max_results: int) -> List[Dict]:
-        """Búsqueda alternativa simulando Google Maps"""
+    async def _scroll_results(self):
+        """Scroll para cargar más resultados"""
         try:
-            self.update_headers()
+            # Encontrar panel de resultados
+            results_panel = self.driver.find_element(By.CSS_SELECTOR, '[role="main"]')
             
-            # Usar Google con parámetros de Maps
-            search_url = f"https://www.google.com/search?q={quote_plus(query)}&tbm=lcl&num={max_results * 2}"
-            
-            await asyncio.sleep(random.uniform(3, 7))
-            
-            response = self.session.get(search_url, timeout=25)
-            
-            if response.status_code != 200:
-                return []
-            
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Extraer datos de resultados locales
-            results = await self._extract_local_results(soup, max_results)
-            
-            return results
+            # Scroll múltiple
+            for i in range(3):
+                self.driver.execute_script("arguments[0].scrollBy(0, 1000);", results_panel)
+                await asyncio.sleep(random.uniform(2, 4))
             
         except Exception as e:
-            logger.error(f"Error en búsqueda Maps alternativa: {e}")
-            return []
+            logger.warning(f"Error en scroll: {e}")
 
-    async def _search_business_listings(self, query: str, max_results: int) -> List[Dict]:
-        """Generar listings de ejemplo basados en patrones reales"""
-        try:
-            # Simular datos realistas para testing
-            mock_businesses = [
-                {
-                    "name": f"Restaurante {random.choice(['La Terraza', 'El Rincón', 'Casa Blanca', 'Del Centro', 'Tradición'])}",
-                    "phone": f"442-{random.randint(200, 999)}-{random.randint(1000, 9999)}",
-                    "address": f"Calle {random.choice(['Juárez', 'Hidalgo', 'Morelos', 'Allende'])} #{random.randint(100, 999)}",
-                    "sector": "Restaurantes",
-                    "rating": round(random.uniform(3.5, 4.8), 1)
-                },
-                {
-                    "name": f"Taller {random.choice(['Hernández', 'Mecánico Express', 'AutoServicio', 'Reparaciones López'])}",
-                    "phone": f"442-{random.randint(300, 999)}-{random.randint(1000, 9999)}",
-                    "address": f"Av. {random.choice(['Constituyentes', 'Universidad', 'Tecnológico'])} #{random.randint(200, 800)}",
-                    "sector": "Talleres",
-                    "rating": round(random.uniform(3.8, 4.5), 1)
-                }
-            ]
-            
-            # Devolver algunos resultados simulados
-            return mock_businesses[:max_results]
-            
-        except Exception as e:
-            logger.error(f"Error en business listings: {e}")
-            return []
-
-    async def _extract_from_google_results(self, soup: BeautifulSoup, max_results: int) -> List[Dict]:
-        """Extraer datos de resultados de Google"""
+    async def _extract_maps_results(self, max_results: int) -> List[Dict]:
+        """Extrae resultados de Google Maps"""
         businesses = []
         
         try:
-            # Buscar en diferentes contenedores
-            result_containers = soup.find_all(['div'], class_=['g', 'tF2Cxc', 'MjjYud'])
+            # Esperar a que aparezcan los resultados
+            WebDriverWait(self.driver, 15).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, '[role="main"]'))
+            )
             
-            for container in result_containers[:max_results * 2]:
+            # Buscar elementos de negocios
+            business_elements = self.driver.find_elements(By.CSS_SELECTOR, 'div[data-result-index]')
+            
+            if not business_elements:
+                # Intentar otros selectores
+                business_elements = self.driver.find_elements(By.CSS_SELECTOR, 'div[jsaction*="mouseover"]')
+            
+            logger.info(f"📊 Encontrados {len(business_elements)} elementos de negocios")
+            
+            for i, element in enumerate(business_elements[:max_results]):
                 try:
-                    business_data = await self._extract_business_from_container(container)
+                    # Click en el elemento para abrir detalles
+                    self.driver.execute_script("arguments[0].click();", element)
+                    await asyncio.sleep(random.uniform(2, 4))
+                    
+                    # Extraer información detallada
+                    business_data = await self._extract_business_details()
+                    
                     if business_data:
                         businesses.append(business_data)
-                        
-                    if len(businesses) >= max_results:
-                        break
-                        
+                        logger.info(f"✅ Negocio extraído: {business_data.get('name', 'Sin nombre')}")
+                    
+                    # Pausa entre extracciones
+                    await asyncio.sleep(random.uniform(1, 3))
+                    
                 except Exception as e:
+                    logger.warning(f"Error extrayendo negocio {i+1}: {e}")
                     continue
             
         except Exception as e:
-            logger.error(f"Error extrayendo de Google: {e}")
+            logger.error(f"Error general en extracción: {e}")
         
         return businesses
 
-    async def _extract_local_results(self, soup: BeautifulSoup, max_results: int) -> List[Dict]:
-        """Extraer resultados locales"""
-        businesses = []
-        
-        try:
-            # Buscar elementos específicos de resultados locales
-            local_results = soup.find_all(['div'], class_=['VkpGBb', 'cXedhc'])
-            
-            for result in local_results[:max_results]:
-                try:
-                    business_data = await self._extract_local_business(result)
-                    if business_data:
-                        businesses.append(business_data)
-                        
-                except Exception as e:
-                    continue
-            
-        except Exception as e:
-            logger.error(f"Error extrayendo resultados locales: {e}")
-        
-        return businesses
-
-    async def _extract_business_from_container(self, container) -> Optional[Dict]:
-        """Extraer información de un contenedor de resultado"""
-        try:
-            text_content = container.get_text()
-            
-            if len(text_content) < 20:
-                return None
-            
-            business = {
-                'extracted_at': datetime.now().isoformat(),
-                'source': 'Google Search'
-            }
-            
-            # Extraer nombre (primer enlace)
-            link = container.find('a')
-            if link:
-                title_elem = link.find(['h3', 'h2'])
-                if title_elem:
-                    business['name'] = title_elem.get_text().strip()
-            
-            # Buscar teléfonos mexicanos
-            phone_patterns = [
-                r'\b442[-\s]?\d{3}[-\s]?\d{4}\b',  # Querétaro
-                r'\b\d{3}[-\s]?\d{3}[-\s]?\d{4}\b',  # Formato general
-                r'\(\d{3}\)\s?\d{3}[-\s]?\d{4}',    # Con paréntesis
-            ]
-            
-            for pattern in phone_patterns:
-                match = re.search(pattern, text_content)
-                if match:
-                    business['phone'] = match.group().strip()
-                    break
-            
-            # Buscar dirección
-            address_keywords = ['calle', 'av.', 'avenida', 'blvd', 'col.', 'colonia']
-            lines = text_content.split('\n')
-            
-            for line in lines:
-                line_lower = line.lower()
-                if any(keyword in line_lower for keyword in address_keywords):
-                    if len(line.strip()) > 10:
-                        business['address'] = line.strip()
-                        break
-            
-            # Solo retornar si tiene datos útiles
-            if business.get('name') and (business.get('phone') or business.get('address')):
-                return business
-                
-            return None
-            
-        except Exception as e:
-            return None
-
-    async def _extract_local_business(self, result) -> Optional[Dict]:
-        """Extraer datos de resultado local"""
+    async def _extract_business_details(self) -> Optional[Dict]:
+        """Extrae detalles específicos del negocio"""
         try:
             business = {
                 'extracted_at': datetime.now().isoformat(),
-                'source': 'Google Local'
+                'source': 'Google Maps Real'
             }
             
             # Extraer nombre
-            name_elem = result.find(['span', 'div'], class_=['OSrXXb', 'dbg0pd'])
-            if name_elem:
-                business['name'] = name_elem.get_text().strip()
+            try:
+                name_element = self.driver.find_element(By.CSS_SELECTOR, 'h1.DUwDvf')
+                business['name'] = name_element.text.strip()
+            except:
+                try:
+                    name_element = self.driver.find_element(By.CSS_SELECTOR, '[data-attrid="title"]')
+                    business['name'] = name_element.text.strip()
+                except:
+                    pass
             
-            # Buscar teléfono en el texto
-            text = result.get_text()
-            phone_match = re.search(r'\b\d{3}[-\s]?\d{3}[-\s]?\d{4}\b', text)
-            if phone_match:
-                business['phone'] = phone_match.group().strip()
+            # Extraer teléfono
+            try:
+                phone_element = self.driver.find_element(By.CSS_SELECTOR, 'button[data-item-id*="phone"]')
+                business['phone'] = phone_element.get_attribute('data-item-id').replace('phone:', '')
+            except:
+                try:
+                    phone_element = self.driver.find_element(By.CSS_SELECTOR, '[data-attrid="kc:/collection/knowledge_panels/has_phone:phone"]')
+                    business['phone'] = phone_element.text.strip()
+                except:
+                    pass
             
-            # Buscar rating
-            rating_elem = result.find(['span'], class_=['yi40Hd'])
-            if rating_elem:
-                rating_text = rating_elem.get_text()
+            # Extraer dirección
+            try:
+                address_element = self.driver.find_element(By.CSS_SELECTOR, 'button[data-item-id*="address"]')
+                business['address'] = address_element.text.strip()
+            except:
+                try:
+                    address_element = self.driver.find_element(By.CSS_SELECTOR, '[data-attrid="kc:/location/location:address"]')
+                    business['address'] = address_element.text.strip()
+                except:
+                    pass
+            
+            # Extraer rating
+            try:
+                rating_element = self.driver.find_element(By.CSS_SELECTOR, 'span.ceNzKf')
+                rating_text = rating_element.text
                 rating_match = re.search(r'(\d+[.,]\d+)', rating_text)
                 if rating_match:
                     business['rating'] = float(rating_match.group(1).replace(',', '.'))
+            except:
+                pass
             
-            return business if business.get('name') else None
+            # Extraer horarios
+            try:
+                hours_element = self.driver.find_element(By.CSS_SELECTOR, '[data-attrid="kc:/location/location:hours"]')
+                business['hours'] = hours_element.text.strip()
+            except:
+                pass
+            
+            # Extraer website
+            try:
+                website_element = self.driver.find_element(By.CSS_SELECTOR, 'a[data-item-id*="authority"]')
+                business['website'] = website_element.get_attribute('href')
+            except:
+                pass
+            
+            # Solo retornar si tiene información básica
+            if business.get('name') and (business.get('phone') or business.get('address')):
+                return business
+            
+            return None
             
         except Exception as e:
+            logger.warning(f"Error extrayendo detalles: {e}")
             return None
 
     def _process_leads(self, leads: List[Dict], sector: str, location: str) -> List[Dict]:
-        """Procesa y enriquece leads"""
+        """Procesa y enriquece leads para análisis crediticio"""
         processed = []
         seen_names = set()
         
@@ -387,17 +390,21 @@ class GoogleMapsLeadScraper:
                     continue
                 seen_names.add(name)
                 
-                # Enriquecer información
+                # Enriquecer para análisis crediticio
                 enhanced_lead = {
-                    'name': lead.get('name', f'Negocio {sector}'),
-                    'phone': lead.get('phone', ''),
-                    'email': self._generate_email(lead.get('name', '')),
+                    'name': lead.get('name', ''),
+                    'phone': self._clean_phone(lead.get('phone', '')),
+                    'email': self._generate_probable_email(lead.get('name', '')),
                     'address': lead.get('address', ''),
+                    'website': lead.get('website', ''),
+                    'hours': lead.get('hours', ''),
                     'sector': sector,
                     'location': location,
-                    'source': lead.get('source', 'Google Search'),
+                    'source': 'Google Maps Real',
                     'rating': lead.get('rating', 0),
                     'credit_potential': self._calculate_credit_potential(lead, sector),
+                    'estimated_revenue': self._estimate_revenue(lead, sector),
+                    'loan_range': self._calculate_loan_range(lead, sector),
                     'extracted_at': lead.get('extracted_at', datetime.now().isoformat())
                 }
                 
@@ -409,8 +416,24 @@ class GoogleMapsLeadScraper:
         
         return processed
 
-    def _generate_email(self, business_name: str) -> str:
-        """Generar email probable basado en nombre"""
+    def _clean_phone(self, phone: str) -> str:
+        """Limpia y formatea teléfono"""
+        if not phone:
+            return ""
+        
+        # Extraer solo números
+        cleaned = re.sub(r'[^\d]', '', phone)
+        
+        # Formatear para México
+        if len(cleaned) == 10:
+            return f"({cleaned[:3]}) {cleaned[3:6]}-{cleaned[6:]}"
+        elif len(cleaned) == 12 and cleaned.startswith('52'):
+            return f"({cleaned[2:5]}) {cleaned[5:8]}-{cleaned[8:]}"
+        
+        return phone
+
+    def _generate_probable_email(self, business_name: str) -> str:
+        """Genera email probable"""
         if not business_name:
             return ""
         
@@ -418,21 +441,23 @@ class GoogleMapsLeadScraper:
         clean_name = re.sub(r'[^a-zA-Z\s]', '', business_name.lower())
         words = clean_name.split()
         
+        domains = ['gmail.com', 'hotmail.com', 'yahoo.com.mx', 'outlook.com']
+        
         if len(words) >= 2:
-            return f"{words[0]}.{words[1]}@gmail.com"
+            return f"{words[0]}.{words[1]}@{random.choice(domains)}"
         elif len(words) == 1:
-            return f"{words[0]}@hotmail.com"
+            return f"{words[0]}@{random.choice(domains)}"
         
         return ""
 
     def _calculate_credit_potential(self, business: Dict, sector: str) -> str:
-        """Calcula potencial de crédito"""
+        """Calcula potencial crediticio REAL"""
         score = 0
         
-        # Score por sector
+        # Score por sector (necesidad de capital)
         high_capital_sectors = ['Restaurantes', 'Talleres', 'Producción']
         if sector in high_capital_sectors:
-            score += 3
+            score += 4
         else:
             score += 2
         
@@ -440,16 +465,79 @@ class GoogleMapsLeadScraper:
         if business.get('phone'):
             score += 2
         if business.get('address'):
-            score += 1
-        if business.get('rating', 0) >= 4.0:
             score += 2
-        elif business.get('rating', 0) >= 3.5:
+        if business.get('website'):
+            score += 1
+        
+        # Score por rating (calidad del negocio)
+        rating = business.get('rating', 0)
+        if rating >= 4.5:
+            score += 3
+        elif rating >= 4.0:
+            score += 2
+        elif rating >= 3.5:
+            score += 1
+        
+        # Score por horarios (negocio activo)
+        if business.get('hours'):
             score += 1
         
         # Determinar potencial
-        if score >= 6:
+        if score >= 8:
             return "ALTO"
-        elif score >= 4:
+        elif score >= 5:
             return "MEDIO"
         else:
             return "BAJO"
+
+    def _estimate_revenue(self, business: Dict, sector: str) -> str:
+        """Estima ingresos mensuales"""
+        base_revenue = {
+            'Restaurantes': 150000,
+            'Talleres': 120000,
+            'Producción': 100000,
+            'Comercio': 80000,
+            'Servicios': 60000
+        }
+        
+        base = base_revenue.get(sector, 70000)
+        
+        # Ajustar por rating
+        rating = business.get('rating', 3.5)
+        if rating >= 4.5:
+            multiplier = 1.5
+        elif rating >= 4.0:
+            multiplier = 1.2
+        elif rating >= 3.5:
+            multiplier = 1.0
+        else:
+            multiplier = 0.8
+        
+        estimated = int(base * multiplier)
+        
+        return f"${estimated:,} - ${int(estimated * 1.5):,}"
+
+    def _calculate_loan_range(self, business: Dict, sector: str) -> str:
+        """Calcula rango de préstamo recomendado"""
+        potential = self._calculate_credit_potential(business, sector)
+        
+        ranges = {
+            'ALTO': "500,000 - 1,500,000",
+            'MEDIO': "200,000 - 800,000", 
+            'BAJO': "50,000 - 300,000"
+        }
+        
+        return f"${ranges.get(potential, '100,000 - 500,000')}"
+
+    def cleanup_driver(self):
+        """Limpia driver"""
+        if self.driver:
+            try:
+                self.driver.quit()
+            except:
+                pass
+            self.driver = None
+
+    def __del__(self):
+        """Destructor"""
+        self.cleanup_driver()
