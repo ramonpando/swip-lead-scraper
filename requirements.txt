@@ -8,4 +8,4 @@ selenium==4.15.2
 webdriver-manager==4.0.1
 undetected-chromedriver==3.5.4
 fake-useragent==1.4.0
-sqlite3
+
