@@ -42,18 +42,17 @@ class GoogleMapsLeadScraper:
     async def test_single_search(self, sector: str, location: str, max_results: int = 1) -> List[Dict]:
         return await self.scrape_leads(sector, location, max_results)
 
-    async def scrape_leads(self, sector: str, location: str, max_leads: int = 10) -> List[Dict]:
-        try:
-            logger.info(f"🔥 Iniciando scraping: {sector} en {location}")
-            logger.info(f"🎯 Objetivo: {max_leads} leads")
-            
-            # URL POR DEFECTO (para compatibilidad)
-            url = "https://www.seccionamarilla.com.mx/resultados/agencias-de-marketing/distrito-federal/zona-metropolitana/1"
-            
-            logger.info(f"📍 URL a scrapear: {url}")
-            
-            # Ejecutar scraping
-            return await self.scrape_leads_from_url(url, max_leads)
+    async def scrape_leads(self, sector: str, location: str, max_leads: int = 10):
+    # ...
+    # CONSTRUIR URL BASADA EN PARÁMETROS
+    if "contadores" in sector.lower():
+        url = "https://www.seccionamarilla.com.mx/resultados/contadores/distrito-federal/zona-metropolitana/1"
+    elif "abogados" in sector.lower():
+        url = "https://www.seccionamarilla.com.mx/resultados/abogados/distrito-federal/zona-metropolitana/1"
+    else:
+        url = "https://www.seccionamarilla.com.mx/resultados/agencias-de-marketing/distrito-federal/zona-metropolitana/1"
+    # ...
+    return await self.scrape_leads_from_url(url, max_leads)
             
         except Exception as e:
             logger.error(f"❌ Error en scraping: {e}")
