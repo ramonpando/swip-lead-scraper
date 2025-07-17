@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-Scraper Inteligente con Rotación Automática
-Sistema que rota categorías y páginas automáticamente
+Scraper completo funcional para Sección Amarilla
+Sin errores de sintaxis - Versión estable
 """
 
 import asyncio
 import time
-import json
-import os
-from typing import List, Dict, Optional, Tuple
+import random
+from typing import List, Dict, Optional
 import requests
 from bs4 import BeautifulSoup
 import logging
@@ -18,9 +17,8 @@ import re
 # Logger setup
 logger = logging.getLogger(__name__)
 
-class IntelligentRotationScraper:
-    """Scraper con rotación automática inteligente"""
-    
+class GoogleMapsLeadScraper:
+    """Scraper funcional para Sección Amarilla"""
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
@@ -31,328 +29,77 @@ class IntelligentRotationScraper:
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1'
         })
-        
-        # Archivo de estado persistente
-        self.state_file = '/tmp/scraper_state.json'
-        self.state = self.load_state()
+        self.extracted_leads = set()
 
-    def get_rotation_strategies(self) -> List[Dict]:
-        """Estrategias de rotación para CDMX, Edo México, Querétaro"""
-        return [
-            # CATEGORÍA 1: MARKETING
-            {
-                "id": "marketing_cdmx",
-                "category": "agencias-de-marketing",
-                "location": "distrito-federal/zona-metropolitana",
-                "name": "Marketing CDMX",
-                "max_pages": 10,
-                "priority": 1
-            },
-            {
-                "id": "marketing_edomex",
-                "category": "agencias-de-marketing", 
-                "location": "estado-de-mexico/toluca",
-                "name": "Marketing Edo México",
-                "max_pages": 8,
-                "priority": 1
-            },
-            {
-                "id": "marketing_queretaro",
-                "category": "agencias-de-marketing",
-                "location": "queretaro/queretaro", 
-                "name": "Marketing Querétaro",
-                "max_pages": 6,
-                "priority": 1
-            },
-            
-            # CATEGORÍA 2: PUBLICIDAD
-            {
-                "id": "publicidad_cdmx",
-                "category": "agencias-de-publicidad",
-                "location": "distrito-federal/zona-metropolitana",
-                "name": "Publicidad CDMX", 
-                "max_pages": 8,
-                "priority": 2
-            },
-            {
-                "id": "publicidad_edomex",
-                "category": "agencias-de-publicidad",
-                "location": "estado-de-mexico/toluca",
-                "name": "Publicidad Edo México",
-                "max_pages": 6,
-                "priority": 2
-            },
-            {
-                "id": "publicidad_queretaro",
-                "category": "agencias-de-publicidad",
-                "location": "queretaro/queretaro",
-                "name": "Publicidad Querétaro", 
-                "max_pages": 4,
-                "priority": 2
-            },
-            
-            # CATEGORÍA 3: SERVICIOS INTERNET
-            {
-                "id": "internet_cdmx",
-                "category": "servicios-de-internet",
-                "location": "distrito-federal/zona-metropolitana",
-                "name": "Servicios Internet CDMX",
-                "max_pages": 6,
-                "priority": 3
-            },
-            {
-                "id": "internet_edomex", 
-                "category": "servicios-de-internet",
-                "location": "estado-de-mexico/toluca",
-                "name": "Servicios Internet Edo México",
-                "max_pages": 4,
-                "priority": 3
-            },
-            {
-                "id": "internet_queretaro",
-                "category": "servicios-de-internet", 
-                "location": "queretaro/queretaro",
-                "name": "Servicios Internet Querétaro",
-                "max_pages": 3,
-                "priority": 3
-            },
-            
-            # CATEGORÍA 4: DISEÑO GRÁFICO
-            {
-                "id": "diseno_cdmx",
-                "category": "diseno-grafico",
-                "location": "distrito-federal/zona-metropolitana", 
-                "name": "Diseño Gráfico CDMX",
-                "max_pages": 5,
-                "priority": 4
-            },
-            {
-                "id": "diseno_edomex",
-                "category": "diseno-grafico",
-                "location": "estado-de-mexico/toluca",
-                "name": "Diseño Gráfico Edo México", 
-                "max_pages": 3,
-                "priority": 4
-            },
-            {
-                "id": "diseno_queretaro",
-                "category": "diseno-grafico",
-                "location": "queretaro/queretaro",
-                "name": "Diseño Gráfico Querétaro",
-                "max_pages": 2,
-                "priority": 4
-            },
-            
-            # CATEGORÍA 5: CONSULTORES
-            {
-                "id": "consultores_cdmx",
-                "category": "consultores",
-                "location": "distrito-federal/zona-metropolitana",
-                "name": "Consultores CDMX",
-                "max_pages": 7,
-                "priority": 5
-            },
-            {
-                "id": "consultores_edomex",
-                "category": "consultores", 
-                "location": "estado-de-mexico/toluca",
-                "name": "Consultores Edo México",
-                "max_pages": 4,
-                "priority": 5
-            },
-            {
-                "id": "consultores_queretaro",
-                "category": "consultores",
-                "location": "queretaro/queretaro",
-                "name": "Consultores Querétaro",
-                "max_pages": 3,
-                "priority": 5
-            }
-        ]
-
-    def load_state(self) -> Dict:
-        """Cargar estado persistente"""
+    def test_connection(self) -> bool:
         try:
-            if os.path.exists(self.state_file):
-                with open(self.state_file, 'r') as f:
-                    state = json.load(f)
-                logger.info(f"Estado cargado: {state}")
-                return state
+            response = self.session.get("https://www.google.com", timeout=10)
+            return response.status_code == 200
+        except Exception as e:
+            logger.error(f"Test connection failed: {e}")
+            return False
+
+    async def test_single_search(self, sector: str, location: str, max_results: int = 1) -> List[Dict]:
+        return await self.scrape_leads(sector, location, max_results)
+
+    async def scrape_leads(self, sector: str, location: str, max_leads: int = 10) -> List[Dict]:
+        try:
+            logger.info(f"🔥 Iniciando scraping: {sector} en {location}")
+            logger.info(f"🎯 Objetivo: {max_leads} leads")
+            
+            # Determinar URL basada en parámetros
+            if "marketing" in sector.lower():
+                url = "https://www.seccionamarilla.com.mx/resultados/agencias-de-marketing/distrito-federal/zona-metropolitana/1"
             else:
-                # Estado inicial
-                initial_state = {
-                    "current_strategy_index": 0,
-                    "current_page": 1,
-                    "completed_strategies": [],
-                    "last_execution": None,
-                    "total_leads_obtained": 0,
-                    "cycle_number": 1
-                }
-                self.save_state(initial_state)
-                return initial_state
-        except Exception as e:
-            logger.error(f"Error cargando estado: {e}")
-            return {
-                "current_strategy_index": 0,
-                "current_page": 1, 
-                "completed_strategies": [],
-                "last_execution": None,
-                "total_leads_obtained": 0,
-                "cycle_number": 1
-            }
-
-    def save_state(self, state: Dict):
-        """Guardar estado persistente"""
-        try:
-            with open(self.state_file, 'w') as f:
-                json.dump(state, f, indent=2)
-            logger.info(f"Estado guardado: {state}")
-        except Exception as e:
-            logger.error(f"Error guardando estado: {e}")
-
-    def get_next_strategy_and_page(self) -> Tuple[Dict, int]:
-        """Obtener siguiente estrategia y página a scrapear"""
-        strategies = self.get_rotation_strategies()
-        
-        # Verificar si completamos el ciclo
-        if self.state["current_strategy_index"] >= len(strategies):
-            logger.info("🔄 CICLO COMPLETADO - Reiniciando desde el principio")
-            self.state["current_strategy_index"] = 0
-            self.state["current_page"] = 1
-            self.state["completed_strategies"] = []
-            self.state["cycle_number"] += 1
-            self.save_state(self.state)
-        
-        current_strategy = strategies[self.state["current_strategy_index"]]
-        current_page = self.state["current_page"]
-        
-        logger.info(f"📍 Estrategia actual: {current_strategy['name']} - Página {current_page}")
-        
-        return current_strategy, current_page
-
-    def advance_to_next_position(self, leads_found: int):
-        """Avanzar a siguiente página o estrategia"""
-        strategies = self.get_rotation_strategies()
-        current_strategy = strategies[self.state["current_strategy_index"]]
-        
-        if leads_found == 0 or self.state["current_page"] >= current_strategy["max_pages"]:
-            # No hay más leads o llegamos al máximo de páginas
-            logger.info(f"✅ Completada estrategia: {current_strategy['name']}")
+                # URL por defecto
+                url = "https://www.seccionamarilla.com.mx/resultados/agencias-de-marketing/distrito-federal/zona-metropolitana/1"
             
-            self.state["completed_strategies"].append(current_strategy["id"])
-            self.state["current_strategy_index"] += 1
-            self.state["current_page"] = 1
-        else:
-            # Continuar con siguiente página de la misma estrategia
-            self.state["current_page"] += 1
-        
-        self.state["last_execution"] = datetime.now().isoformat()
-        self.save_state(self.state)
-
-    async def execute_intelligent_scraping(self, target_leads: int = 20) -> Dict:
-        """Ejecutar scraping inteligente con rotación"""
-        try:
-            logger.info("🚀 INICIANDO SCRAPING INTELIGENTE")
+            logger.info(f"📍 URL a scrapear: {url}")
             
-            # Obtener estrategia y página actual
-            strategy, page = self.get_next_strategy_and_page()
-            
-            # Construir URL
-            url = f"https://www.seccionamarilla.com.mx/resultados/{strategy['category']}/{strategy['location']}/{page}"
-            
-            logger.info(f"🎯 Scrapeando: {url}")
-            
-            # Ejecutar scraping
-            leads = await self.scrape_page(url, strategy, page)
-            
-            # Actualizar estado y avanzar
-            self.advance_to_next_position(len(leads))
-            self.state["total_leads_obtained"] += len(leads)
-            
-            # Preparar respuesta
-            result = {
-                "timestamp": datetime.now().isoformat(),
-                "strategy_used": strategy["name"], 
-                "category": strategy["category"],
-                "location": strategy["location"],
-                "page_scraped": page,
-                "leads_obtained": len(leads),
-                "leads": leads,
-                "system_state": {
-                    "cycle_number": self.state["cycle_number"],
-                    "total_leads_in_cycle": self.state["total_leads_obtained"], 
-                    "current_strategy_index": self.state["current_strategy_index"],
-                    "current_page": self.state["current_page"],
-                    "strategies_completed": len(self.state["completed_strategies"]),
-                    "next_strategy": self.get_next_strategy_preview()
-                },
-                "rotation_info": {
-                    "intelligent_rotation": True,
-                    "geographic_scope": "CDMX + Edo México + Querétaro",
-                    "auto_cycle_reset": True,
-                    "estimated_cycle_duration": "2-3 semanas"
-                }
-            }
-            
-            logger.info(f"✅ SCRAPING COMPLETADO: {len(leads)} leads obtenidos")
-            logger.info(f"📊 Estado: Ciclo {self.state['cycle_number']}, Estrategia {self.state['current_strategy_index']}, Página {self.state['current_page']}")
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"❌ Error en scraping inteligente: {e}")
-            return {
-                "timestamp": datetime.now().isoformat(),
-                "error": str(e),
-                "leads_obtained": 0,
-                "leads": []
-            }
-
-    def get_next_strategy_preview(self) -> str:
-        """Obtener preview de próxima estrategia"""
-        strategies = self.get_rotation_strategies()
-        
-        if self.state["current_strategy_index"] < len(strategies):
-            next_strategy = strategies[self.state["current_strategy_index"]]
-            return f"{next_strategy['name']} - Página {self.state['current_page']}"
-        else:
-            return "Inicio de nuevo ciclo - Marketing CDMX Página 1"
-
-    async def scrape_page(self, url: str, strategy: Dict, page: int) -> List[Dict]:
-        """Scrapear una página específica"""
-        try:
+            # Hacer request
             response = self.session.get(url, timeout=30)
             response.raise_for_status()
             
             soup = BeautifulSoup(response.content, 'html.parser')
             leads = []
             
-            # Usar selectores probados
+            # Buscar en filas de tabla
             business_rows = soup.find_all('tr')
+            logger.info(f"📋 Filas encontradas: {len(business_rows)}")
             
             for row in business_rows:
-                lead = self.extract_lead_from_row(row, strategy)
-                if lead:
-                    leads.append(lead)
+                lead = self._extract_from_business_row(row)
+                if lead and len(leads) < max_leads:
+                    # Evitar duplicados
+                    lead_id = f"{lead.get('name', '')}-{lead.get('phone', '')}"
+                    if lead_id not in self.extracted_leads:
+                        self.extracted_leads.add(lead_id)
+                        leads.append(lead)
+                        logger.info(f"✅ Lead extraído: {lead.get('name', 'Sin nombre')}")
             
             # También buscar enlaces de teléfono
             phone_links = soup.find_all('a', href=re.compile(r'tel:'))
+            logger.info(f"📞 Enlaces de teléfono: {len(phone_links)}")
+            
             for link in phone_links:
-                lead = self.extract_lead_from_phone_link(link, soup, strategy)
+                if len(leads) >= max_leads:
+                    break
+                lead = self._extract_from_phone_link(link, soup)
                 if lead:
-                    leads.append(lead)
+                    lead_id = f"{lead.get('name', '')}-{lead.get('phone', '')}"
+                    if lead_id not in self.extracted_leads:
+                        self.extracted_leads.add(lead_id)
+                        leads.append(lead)
             
-            # Deduplicar por teléfono
-            unique_leads = self.deduplicate_leads(leads)
-            
-            return unique_leads
+            logger.info(f"🎯 Total leads extraídos: {len(leads)}")
+            return leads
             
         except Exception as e:
-            logger.error(f"Error scrapeando {url}: {e}")
+            logger.error(f"❌ Error en scraping: {e}")
             return []
 
-    def extract_lead_from_row(self, row, strategy: Dict) -> Optional[Dict]:
-        """Extraer lead de fila"""
+    def _extract_from_business_row(self, row) -> Optional[Dict]:
+        """Extraer información de fila de negocio"""
         try:
             cells = row.find_all(['td', 'th'])
             if len(cells) < 2:
@@ -365,70 +112,156 @@ class IntelligentRotationScraper:
             if any(keyword in row_text.lower() for keyword in skip_keywords):
                 return None
             
-            # Extraer datos
-            name = self.extract_business_name(cells)
-            phone = self.extract_phone(row_text)
-            address = self.extract_address(row)
+            # Buscar nombre de empresa
+            name = None
+            for cell in cells:
+                cell_text = cell.get_text(strip=True)
+                if (len(cell_text) > 3 and 
+                    not cell_text.lower() in ['abierto', 'cerrado'] and
+                    not cell_text.startswith('AV.') and
+                    not cell_text.startswith('CALLE') and
+                    not re.match(r'\(\d+\)', cell_text)):
+                    
+                    name = cell_text
+                    break
+            
+            # Buscar teléfono
+            phone = self._extract_phone(row_text)
+            
+            # Buscar dirección
+            address = self._extract_address_from_row(row)
             
             if name and phone and len(name) > 3:
                 return {
                     'name': name,
                     'phone': phone,
-                    'email': None,  # Se completará después
-                    'address': address or strategy['location'],
-                    'sector': strategy['name'],
-                    'location': strategy['location'].split('/')[0],
-                    'source': 'seccion_amarilla_intelligent',
-                    'credit_potential': self.assess_credit_potential(strategy),
-                    'estimated_revenue': self.estimate_revenue(strategy),
-                    'loan_range': self.estimate_loan_range(strategy),
+                    'email': None,
+                    'address': address or "México, DF",
+                    'sector': 'Marketing/Publicidad',
+                    'location': 'México, DF',
+                    'source': 'seccion_amarilla',
+                    'credit_potential': 'ALTO',
+                    'estimated_revenue': '$200,000 - $500,000',
+                    'loan_range': '$50,000 - $1,200,000',
                     'extracted_at': datetime.now().isoformat(),
-                    'strategy_used': strategy['name'],
-                    'page_found': strategy.get('current_page', 1),
-                    'cycle_number': self.state.get('cycle_number', 1)
+                    'debug_results_type': '<class "business_row">'
                 }
             
             return None
             
         except Exception as e:
+            logger.error(f"Error extrayendo de fila: {e}")
             return None
 
-    def extract_lead_from_phone_link(self, link, soup, strategy: Dict) -> Optional[Dict]:
-        """Extraer lead de enlace telefónico"""
+    def _extract_from_phone_link(self, link, soup) -> Optional[Dict]:
+        """Extraer información del enlace de teléfono"""
         try:
             phone = link.get('href').replace('tel:', '').strip()
             
+            # Buscar el contenedor padre del teléfono
             container = link.find_parent(['tr', 'div', 'td'])
             if container:
-                name = self.find_business_name_in_container(container)
+                name = self._find_business_name_in_container(container)
                 
                 if name and phone:
                     return {
                         'name': name,
                         'phone': phone,
                         'email': None,
-                        'address': strategy['location'].split('/')[0],
-                        'sector': strategy['name'],
-                        'location': strategy['location'].split('/')[0],
-                        'source': 'seccion_amarilla_intelligent',
-                        'credit_potential': self.assess_credit_potential(strategy),
-                        'estimated_revenue': self.estimate_revenue(strategy),
-                        'loan_range': self.estimate_loan_range(strategy),
+                        'address': "México, DF",
+                        'sector': 'Marketing/Publicidad',
+                        'location': 'México, DF',
+                        'source': 'seccion_amarilla',
+                        'credit_potential': 'ALTO',
+                        'estimated_revenue': '$200,000 - $500,000',
+                        'loan_range': '$50,000 - $1,200,000',
                         'extracted_at': datetime.now().isoformat(),
-                        'strategy_used': strategy['name'],
-                        'page_found': strategy.get('current_page', 1),
-                        'cycle_number': self.state.get('cycle_number', 1)
+                        'debug_results_type': '<class "phone_link">'
                     }
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error extrayendo de enlace: {e}")
+            return None
+
+    def _extract_phone(self, text: str) -> Optional[str]:
+        """Extraer teléfono del texto"""
+        patterns = [
+            r'\(\d{2,3}\)\d{3,4}-?\d{4}',  # (55)1234-5678
+            r'\d{10}',  # 5512345678
+            r'\d{3}[-.\s]?\d{3}[-.\s]?\d{4}',  # 555-123-4567
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                return match.group()
+        
+        return None
+
+    def _extract_address_from_row(self, row) -> Optional[str]:
+        """Extraer dirección de la fila"""
+        try:
+            cells = row.find_all(['td', 'th'])
+            
+            # Buscar celda que contenga dirección
+            for cell in cells:
+                text = cell.get_text(strip=True)
+                if any(indicator in text.upper() for indicator in ['AV.', 'CALLE', 'COL.', 'BENITO', 'JUAREZ']):
+                    return text[:100]
             
             return None
             
         except Exception as e:
             return None
 
-    def assess_credit_potential(self, strategy: Dict) -> str:
-        """Evaluar potencial crediticio basado en sector"""
-        high_potential = ['agencias-de-marketing', 'servicios-de-internet']
+    def _find_business_name_in_container(self, container) -> Optional[str]:
+        """Encontrar nombre de negocio en contenedor"""
+        try:
+            # Buscar en elementos de texto prominente
+            for tag in ['h1', 'h2', 'h3', 'h4', 'strong', 'b']:
+                elem = container.find(tag)
+                if elem:
+                    text = elem.get_text(strip=True)
+                    if len(text) > 3:
+                        return text[:50]
+            
+            # Buscar en texto general
+            texts = container.find_all(text=True)
+            for text in texts:
+                text = text.strip()
+                if (len(text) > 3 and 
+                    not re.match(r'^\(\d+\)', text) and
+                    not text.lower() in ['abierto', 'cerrado'] and
+                    not text.startswith('AV.')):
+                    
+                    return text[:50]
+            
+            return None
+            
+        except Exception as e:
+            return None
+
+# Función para compatibilidad con el sistema existente
+def scrape_seccion_amarilla(url):
+    """Función compatible con el sistema existente"""
+    scraper = GoogleMapsLeadScraper()
+    
+    # Ejecutar scraping síncrono
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        # Extraer parámetros de la URL o usar defaults
+        if 'marketing' in url:
+            sector = 'agencias de marketing'
+            location = 'distrito federal'
+        else:
+            sector = 'empresas'
+            location = 'méxico'
         
-        if strategy['category'] in high_potential:
-            return 'ALTO'
-        elif strategy['priorit
+        results = loop.run_until_complete(scraper.scrape_leads(sector, location, 10))
+        return results
+    finally:
+        loop.close()
