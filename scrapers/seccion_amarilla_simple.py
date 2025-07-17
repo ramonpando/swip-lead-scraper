@@ -48,75 +48,14 @@ class GoogleMapsLeadScraper:
             logger.info(f"🔥 Iniciando scraping: {sector} en {location}")
             logger.info(f"🎯 Objetivo: {max_leads} leads")
             
-            # URLS HARDCODEADAS PARA CATEGORÍAS DE ALTO VALOR
-            if "contadores" in sector.lower() or "contador" in sector.lower():
+            if "contadores" in sector.lower():
                 url = "https://www.seccionamarilla.com.mx/resultados/contadores/distrito-federal/zona-metropolitana/1"
                 logger.info("📊 CATEGORÍA: Contadores")
-                
-            elif "abogados" in sector.lower() or "abogado" in sector.lower():
-                url = "https://www.seccionamarilla.com.mx/resultados/abogados/distrito-federal/zona-metropolitana/1"
-                logger.info("⚖️ CATEGORÍA: Abogados")
-                
-            elif "arquitectos" in sector.lower() or "arquitecto" in sector.lower():
-                url = "https://www.seccionamarilla.com.mx/resultados/arquitectos/distrito-federal/zona-metropolitana/1"
-                logger.info("🏗️ CATEGORÍA: Arquitectos")
-                
-            elif "medicos" in sector.lower() or "medico" in sector.lower() or "doctor" in sector.lower():
-                url = "https://www.seccionamarilla.com.mx/resultados/medicos/distrito-federal/zona-metropolitana/1"
-                logger.info("👨‍⚕️ CATEGORÍA: Médicos")
-                
-            elif "dentistas" in sector.lower() or "dentista" in sector.lower():
-                url = "https://www.seccionamarilla.com.mx/resultados/dentistas/distrito-federal/zona-metropolitana/1"
-                logger.info("🦷 CATEGORÍA: Dentistas")
-                
-            elif "ingenieros" in sector.lower() or "ingeniero" in sector.lower():
-                url = "https://www.seccionamarilla.com.mx/resultados/ingenieros/distrito-federal/zona-metropolitana/1"
-                logger.info("🔧 CATEGORÍA: Ingenieros")
-                
-            elif "consultores" in sector.lower() or "consultor" in sector.lower():
-                url = "https://www.seccionamarilla.com.mx/resultados/consultores/distrito-federal/zona-metropolitana/1"
-                logger.info("💼 CATEGORÍA: Consultores")
-                
-            elif "publicidad" in sector.lower():
-                url = "https://www.seccionamarilla.com.mx/resultados/agencias-de-publicidad/distrito-federal/zona-metropolitana/1"
-                logger.info("📢 CATEGORÍA: Publicidad")
-                
-            elif "notarios" in sector.lower() or "notario" in sector.lower():
-                url = "https://www.seccionamarilla.com.mx/resultados/notarios/distrito-federal/zona-metropolitana/1"
-                logger.info("📜 CATEGORÍA: Notarios")
-                
-            elif "veterinarios" in sector.lower() or "veterinario" in sector.lower():
-                url = "https://www.seccionamarilla.com.mx/resultados/veterinarios/distrito-federal/zona-metropolitana/1"
-                logger.info("🐕 CATEGORÍA: Veterinarios")
-                
-            elif "restaurantes" in sector.lower() or "restaurante" in sector.lower():
-                url = "https://www.seccionamarilla.com.mx/resultados/restaurantes/distrito-federal/zona-metropolitana/1"
-                logger.info("🍽️ CATEGORÍA: Restaurantes")
-                
-            elif "farmacias" in sector.lower() or "farmacia" in sector.lower():
-                url = "https://www.seccionamarilla.com.mx/resultados/farmacias/distrito-federal/zona-metropolitana/1"
-                logger.info("💊 CATEGORÍA: Farmacias")
-                
-            elif "talleres" in sector.lower() or "taller" in sector.lower():
-                url = "https://www.seccionamarilla.com.mx/resultados/talleres-automotrices/distrito-federal/zona-metropolitana/1"
-                logger.info("🔧 CATEGORÍA: Talleres Automotrices")
-                
-            elif "inmobiliarias" in sector.lower() or "inmobiliaria" in sector.lower():
-                url = "https://www.seccionamarilla.com.mx/resultados/inmobiliarias/distrito-federal/zona-metropolitana/1"
-                logger.info("🏠 CATEGORÍA: Inmobiliarias")
-                
-            elif "ferreterias" in sector.lower() or "ferreteria" in sector.lower():
-                url = "https://www.seccionamarilla.com.mx/resultados/ferreterias/distrito-federal/zona-metropolitana/1"
-                logger.info("🔨 CATEGORÍA: Ferreterías")
-                
-            # DEFAULT: Marketing (categoría original que sabemos que funciona)
             else:
                 url = "https://www.seccionamarilla.com.mx/resultados/agencias-de-marketing/distrito-federal/zona-metropolitana/1"
                 logger.info("🎯 CATEGORÍA: Marketing (Default)")
             
             logger.info(f"📍 URL construida: {url}")
-            
-            # Ejecutar scraping con URL específica
             return await self.scrape_leads_from_url(url, max_leads)
             
         except Exception as e:
