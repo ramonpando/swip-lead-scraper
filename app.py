@@ -239,8 +239,7 @@ async def get_job_results(job_id: str):
                 "job_id": job_id,
                 "status": "failed",
                 "message": "Job falló"
-            }
-        
+            } 
      elif job["status"] == "completed":
     results = job.get("results", [])
     # Manejo seguro de None
