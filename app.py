@@ -235,13 +235,18 @@ async def get_job_results(job_id: str):
                 "message": "Job falló"
             }
         elif job["status"] == "completed":
-            results = job.get("results", [])
-            return {
-                "job_id": job_id,
-                "status": "completed",
-                "total_leads": len(results) if results else 0,
-                "leads": results
-            }
+    results = job.get("results", [])
+    # Manejo seguro de None
+    if results is None:
+        results = []
+    
+    return {
+        "job_id": job_id,
+        "status": "completed",
+        "total_leads": len(results),
+        "leads": results,
+        "debug_results_type": str(type(results))
+    }
         
     except HTTPException:
         raise
