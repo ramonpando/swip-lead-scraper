@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Scraper completo funcional para Sección Amarilla
-CON PAGINACIÓN AUTOMÁTICA - Sin errores de indentación
+CON PAGINACIÓN AUTOMÁTICA Y FIX DE NOMBRES/DIRECCIONES
 """
 
 import asyncio
@@ -18,7 +18,7 @@ import re
 logger = logging.getLogger(__name__)
 
 class GoogleMapsLeadScraper:
-    """Scraper funcional para Sección Amarilla con paginación automática"""
+    """Scraper funcional para Sección Amarilla con paginación automática y nombres limpios"""
     
     def __init__(self):
         self.session = requests.Session()
@@ -188,7 +188,7 @@ class GoogleMapsLeadScraper:
             return 'Servicios Profesionales'
 
     def _extract_from_business_row(self, row, sector: str) -> Optional[Dict]:
-        """Extraer información de fila de negocio"""
+        """Extraer información de fila de negocio - MEJORADO para separar nombre y dirección"""
         try:
             cells = row.find_all(['td', 'th'])
             if len(cells) < 2:
@@ -200,19 +200,86 @@ class GoogleMapsLeadScraper:
             if any(keyword in row_text.lower() for keyword in skip_keywords):
                 return None
             
+            # MEJORAR EXTRACCIÓN DE NOMBRE
             name = None
-            for cell in cells:
+            address = None
+            
+            # Buscar en cada celda por separado
+            for i, cell in enumerate(cells):
                 cell_text = cell.get_text(strip=True)
-                if (len(cell_text) > 3 and 
-                    not cell_text.lower() in ['abierto', 'cerrado'] and
-                    not cell_text.startswith('AV.') and
-                    not cell_text.startswith('CALLE') and
-                    not re.match(r'\(\d+\)', cell_text)):
-                    name = cell_text
-                    break
+                
+                # Skip celdas vacías o muy cortas
+                if len(cell_text) < 4:
+                    continue
+                
+                # Skip celdas que claramente no son nombres
+                if any(skip in cell_text.lower() for skip in ['abierto', 'cerrado', 'compartir', 'ruta']):
+                    continue
+                
+                # Skip números de teléfono
+                if re.match(r'^\(\d+\)', cell_text) or re.match(r'^\d{10}', cell_text):
+                    continue
+                
+                # DETECTAR SI ES DIRECCIÓN (contiene indicadores de dirección)
+                address_indicators = ['CALLE', 'AV.', 'AVENIDA', 'BLVD', 'BOULEVARD', 'COL.', 'COLONIA', 
+                                    'NO.', 'NUM.', '#', 'DESP', 'PISO', 'INT.', 'INTERIOR',
+                                    'KM', 'KILOMETRO', 'CARRETERA', 'C.P.']
+                
+                is_address = any(indicator in cell_text.upper() for indicator in address_indicators)
+                
+                # DETECTAR SI ES NOMBRE (primera parte antes de indicadores de dirección)
+                if not name and not is_address:
+                    # Buscar donde empieza la dirección dentro del texto
+                    name_end_pos = len(cell_text)
+                    
+                    for indicator in address_indicators:
+                        pos = cell_text.upper().find(indicator)
+                        if pos > 0 and pos < name_end_pos:
+                            name_end_pos = pos
+                    
+                    # También buscar patrones numéricos que indican inicio de dirección
+                    number_match = re.search(r'\b\d+\s+(NO\.|NUM\.|#|NORTE|SUR|ORIENTE|PONIENTE)', cell_text.upper())
+                    if number_match and number_match.start() < name_end_pos:
+                        name_end_pos = number_match.start()
+                    
+                    # Extraer solo la parte del nombre
+                    potential_name = cell_text[:name_end_pos].strip()
+                    
+                    # Limpiar nombre de caracteres extraños al final
+                    potential_name = re.sub(r'[,\-\s]+$', '', potential_name)
+                    
+                    if len(potential_name) > 3:
+                        name = potential_name
+                        
+                        # Si había dirección en la misma celda, extraerla
+                        if name_end_pos < len(cell_text):
+                            address = cell_text[name_end_pos:].strip()
+                
+                # Si es claramente una dirección y no tenemos address
+                elif is_address and not address:
+                    address = cell_text
+            
+            # Si no encontramos nombre separado, usar método anterior pero más limpio
+            if not name:
+                for cell in cells:
+                    cell_text = cell.get_text(strip=True)
+                    if (len(cell_text) > 3 and 
+                        not cell_text.lower() in ['abierto', 'cerrado'] and
+                        not cell_text.startswith('AV.') and
+                        not cell_text.startswith('CALLE') and
+                        not re.match(r'\(\d+\)', cell_text)):
+                        
+                        # Limpiar el nombre de direcciones concatenadas
+                        clean_name = self._clean_name_from_address(cell_text)
+                        if clean_name:
+                            name = clean_name
+                            break
             
             phone = self._extract_phone(row_text)
-            address = self._extract_address_from_row(row)
+            
+            # Si no tenemos dirección de las celdas, extraer del texto completo
+            if not address:
+                address = self._extract_address_from_row(row)
             
             if name and phone and len(name) > 3:
                 return {
@@ -236,6 +303,45 @@ class GoogleMapsLeadScraper:
             logger.error(f"Error extrayendo de fila: {e}")
             return None
 
+    def _clean_name_from_address(self, text: str) -> Optional[str]:
+        """Limpiar nombre de direcciones concatenadas"""
+        try:
+            # Patrones que indican donde termina el nombre y empieza la dirección
+            address_patterns = [
+                r'\b(CALLE|AV\.|AVENIDA|BLVD|BOULEVARD|COL\.|COLONIA)\b',
+                r'\b(NO\.|NUM\.|#)\s*\d+',
+                r'\b\d+\s+(NORTE|SUR|ORIENTE|PONIENTE|NO\.|NUM\.)',
+                r'\bC\.P\.\s*\d+',
+                r'\b(DESP|PISO|INT\.|INTERIOR)\s*\d+',
+                r'\b(KM|KILOMETRO)\s*\d+',
+                r'\bCARRETERA\b'
+            ]
+            
+            # Buscar el primer patrón que aparezca
+            earliest_pos = len(text)
+            for pattern in address_patterns:
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match and match.start() < earliest_pos:
+                    earliest_pos = match.start()
+            
+            # Extraer solo la parte del nombre
+            if earliest_pos < len(text):
+                clean_name = text[:earliest_pos].strip()
+                # Limpiar caracteres finales
+                clean_name = re.sub(r'[,\-\s]+$', '', clean_name)
+                
+                if len(clean_name) > 3:
+                    return clean_name
+            
+            # Si no encontramos patrones, devolver texto original si es razonable
+            if len(text) <= 80:  # Nombres muy largos probablemente incluyen dirección
+                return text.strip()
+            
+            return None
+            
+        except Exception as e:
+            return None
+
     def _extract_from_phone_link(self, link, soup, sector: str) -> Optional[Dict]:
         """Extraer información del enlace de teléfono"""
         try:
@@ -246,6 +352,11 @@ class GoogleMapsLeadScraper:
                 name = self._find_business_name_in_container(container)
                 
                 if name and phone:
+                    # Limpiar nombre si contiene dirección
+                    clean_name = self._clean_name_from_address(name)
+                    if clean_name:
+                        name = clean_name
+                    
                     return {
                         'name': name,
                         'phone': phone,
