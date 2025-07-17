@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Scraper completo funcional para Sección Amarilla
-CON 15 CATEGORÍAS HARDCODEADAS DE ALTO VALOR
+CON PAGINACIÓN AUTOMÁTICA - Sin errores de indentación
 """
 
 import asyncio
@@ -18,7 +18,7 @@ import re
 logger = logging.getLogger(__name__)
 
 class GoogleMapsLeadScraper:
-    """Scraper funcional para Sección Amarilla con 15 categorías hardcodeadas"""
+    """Scraper funcional para Sección Amarilla con paginación automática"""
     
     def __init__(self):
         self.session = requests.Session()
@@ -43,13 +43,12 @@ class GoogleMapsLeadScraper:
     async def test_single_search(self, sector: str, location: str, max_results: int = 1) -> List[Dict]:
         return await self.scrape_leads(sector, location, max_results)
 
-   async def scrape_leads(self, sector: str, location: str, max_leads: int = 10) -> List[Dict]:
+    async def scrape_leads(self, sector: str, location: str, max_leads: int = 10) -> List[Dict]:
         try:
             logger.info(f"🔥 Iniciando scraping: {sector} en {location}")
             logger.info(f"🎯 Objetivo: {max_leads} leads")
             
             # CALCULAR PÁGINA AUTOMÁTICAMENTE BASADO EN TIEMPO
-            from datetime import datetime
             now = datetime.now()
             
             # Rotación cada 2 horas: página 1-10
@@ -84,6 +83,21 @@ class GoogleMapsLeadScraper:
                 base_url = "https://www.seccionamarilla.com.mx/resultados/dentistas/distrito-federal/zona-metropolitana"
                 url = f"{base_url}/{page_number}"
                 logger.info("🦷 CATEGORÍA: Dentistas")
+                
+            elif "ingenieros" in sector.lower() or "ingeniero" in sector.lower():
+                base_url = "https://www.seccionamarilla.com.mx/resultados/ingenieros/distrito-federal/zona-metropolitana"
+                url = f"{base_url}/{page_number}"
+                logger.info("🔧 CATEGORÍA: Ingenieros")
+                
+            elif "consultores" in sector.lower() or "consultor" in sector.lower():
+                base_url = "https://www.seccionamarilla.com.mx/resultados/consultores/distrito-federal/zona-metropolitana"
+                url = f"{base_url}/{page_number}"
+                logger.info("💼 CATEGORÍA: Consultores")
+                
+            elif "publicidad" in sector.lower():
+                base_url = "https://www.seccionamarilla.com.mx/resultados/agencias-de-publicidad/distrito-federal/zona-metropolitana"
+                url = f"{base_url}/{page_number}"
+                logger.info("📢 CATEGORÍA: Publicidad")
                 
             # DEFAULT: Marketing
             else:
@@ -168,20 +182,6 @@ class GoogleMapsLeadScraper:
             return 'Consultores'
         elif 'publicidad' in url.lower():
             return 'Publicidad'
-        elif 'notarios' in url.lower():
-            return 'Notarios'
-        elif 'veterinarios' in url.lower():
-            return 'Veterinarios'
-        elif 'restaurantes' in url.lower():
-            return 'Restaurantes'
-        elif 'farmacias' in url.lower():
-            return 'Farmacias'
-        elif 'talleres' in url.lower():
-            return 'Talleres Automotrices'
-        elif 'inmobiliarias' in url.lower():
-            return 'Inmobiliarias'
-        elif 'ferreterias' in url.lower():
-            return 'Ferreterías'
         elif 'marketing' in url.lower():
             return 'Marketing/Publicidad'
         else:
@@ -270,7 +270,7 @@ class GoogleMapsLeadScraper:
     def _assess_credit_potential(self, sector: str) -> str:
         """Evaluar potencial crediticio basado en sector"""
         high_potential = ['Contadores', 'Abogados', 'Arquitectos', 'Médicos', 'Ingenieros']
-        medium_high = ['Dentistas', 'Consultores', 'Notarios', 'Inmobiliarias']
+        medium_high = ['Dentistas', 'Consultores', 'Publicidad']
         
         if sector in high_potential:
             return 'ALTO'
@@ -283,9 +283,9 @@ class GoogleMapsLeadScraper:
         """Estimar ingresos basado en sector"""
         if sector in ['Contadores', 'Abogados', 'Médicos']:
             return '$500,000 - $1,500,000'
-        elif sector in ['Arquitectos', 'Ingenieros', 'Notarios']:
+        elif sector in ['Arquitectos', 'Ingenieros']:
             return '$400,000 - $1,200,000'
-        elif sector in ['Dentistas', 'Consultores', 'Inmobiliarias']:
+        elif sector in ['Dentistas', 'Consultores']:
             return '$300,000 - $800,000'
         else:
             return '$200,000 - $600,000'
@@ -294,9 +294,9 @@ class GoogleMapsLeadScraper:
         """Estimar rango de préstamo basado en sector"""
         if sector in ['Contadores', 'Abogados', 'Médicos']:
             return '$125,000 - $3,750,000'
-        elif sector in ['Arquitectos', 'Ingenieros', 'Notarios']:
+        elif sector in ['Arquitectos', 'Ingenieros']:
             return '$100,000 - $3,000,000'
-        elif sector in ['Dentistas', 'Consultores', 'Inmobiliarias']:
+        elif sector in ['Dentistas', 'Consultores']:
             return '$75,000 - $2,000,000'
         else:
             return '$50,000 - $1,500,000'
