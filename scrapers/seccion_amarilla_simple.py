@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Scraper completo funcional para Sección Amarilla
-Sin errores de sintaxis - Versión estable
+CON URL DINÁMICA - Respeta la categoría que le envías
 """
 
 import asyncio
@@ -18,7 +18,7 @@ import re
 logger = logging.getLogger(__name__)
 
 class GoogleMapsLeadScraper:
-    """Scraper funcional para Sección Amarilla"""
+    """Scraper funcional para Sección Amarilla con URL dinámica"""
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
@@ -47,28 +47,39 @@ class GoogleMapsLeadScraper:
             logger.info(f"🔥 Iniciando scraping: {sector} en {location}")
             logger.info(f"🎯 Objetivo: {max_leads} leads")
             
-            # Determinar URL basada en parámetros
-            if "marketing" in sector.lower():
-                url = "https://www.seccionamarilla.com.mx/resultados/agencias-de-marketing/distrito-federal/zona-metropolitana/1"
-            else:
-                # URL por defecto
-                url = "https://www.seccionamarilla.com.mx/resultados/agencias-de-marketing/distrito-federal/zona-metropolitana/1"
+            # URL POR DEFECTO (para compatibilidad)
+            url = "https://www.seccionamarilla.com.mx/resultados/agencias-de-marketing/distrito-federal/zona-metropolitana/1"
             
             logger.info(f"📍 URL a scrapear: {url}")
             
-            # Hacer request
+            # Ejecutar scraping
+            return await self.scrape_leads_from_url(url, max_leads)
+            
+        except Exception as e:
+            logger.error(f"❌ Error en scraping: {e}")
+            return []
+
+    async def scrape_leads_from_url(self, url: str, max_leads: int = 10) -> List[Dict]:
+        """Scrapear desde URL específica - NUEVA FUNCIÓN"""
+        try:
+            logger.info(f"🔥 Scraping URL específica: {url}")
+            
+            # USAR LA URL TAL COMO VIENE - NO HARDCODED
             response = self.session.get(url, timeout=30)
             response.raise_for_status()
             
             soup = BeautifulSoup(response.content, 'html.parser')
             leads = []
             
+            # Determinar sector basado en URL
+            sector = self._extract_sector_from_url(url)
+            
             # Buscar en filas de tabla
             business_rows = soup.find_all('tr')
             logger.info(f"📋 Filas encontradas: {len(business_rows)}")
             
             for row in business_rows:
-                lead = self._extract_from_business_row(row)
+                lead = self._extract_from_business_row(row, sector)
                 if lead and len(leads) < max_leads:
                     # Evitar duplicados
                     lead_id = f"{lead.get('name', '')}-{lead.get('phone', '')}"
@@ -84,22 +95,45 @@ class GoogleMapsLeadScraper:
             for link in phone_links:
                 if len(leads) >= max_leads:
                     break
-                lead = self._extract_from_phone_link(link, soup)
+                lead = self._extract_from_phone_link(link, soup, sector)
                 if lead:
                     lead_id = f"{lead.get('name', '')}-{lead.get('phone', '')}"
                     if lead_id not in self.extracted_leads:
                         self.extracted_leads.add(lead_id)
                         leads.append(lead)
             
-            logger.info(f"🎯 Total leads extraídos: {len(leads)}")
+            logger.info(f"🎯 Total leads de {sector}: {len(leads)}")
             return leads
             
         except Exception as e:
-            logger.error(f"❌ Error en scraping: {e}")
+            logger.error(f"❌ Error scraping {url}: {e}")
             return []
 
-    def _extract_from_business_row(self, row) -> Optional[Dict]:
-        """Extraer información de fila de negocio"""
+    def _extract_sector_from_url(self, url: str) -> str:
+        """Extraer sector de la URL - NUEVA FUNCIÓN"""
+        if 'contadores' in url.lower():
+            return 'Contadores'
+        elif 'abogados' in url.lower():
+            return 'Abogados'
+        elif 'marketing' in url.lower():
+            return 'Marketing/Publicidad'
+        elif 'arquitectos' in url.lower():
+            return 'Arquitectos'
+        elif 'ingenieros' in url.lower():
+            return 'Ingenieros'
+        elif 'medicos' in url.lower():
+            return 'Médicos'
+        elif 'dentistas' in url.lower():
+            return 'Dentistas'
+        elif 'consultores' in url.lower():
+            return 'Consultores'
+        elif 'publicidad' in url.lower():
+            return 'Publicidad'
+        else:
+            return 'Servicios Profesionales'
+
+    def _extract_from_business_row(self, row, sector: str) -> Optional[Dict]:
+        """Extraer información de fila de negocio - ACTUALIZADA"""
         try:
             cells = row.find_all(['td', 'th'])
             if len(cells) < 2:
@@ -137,14 +171,14 @@ class GoogleMapsLeadScraper:
                     'phone': phone,
                     'email': None,
                     'address': address or "México, DF",
-                    'sector': 'Marketing/Publicidad',
+                    'sector': sector,  # <-- USAR SECTOR DINÁMICO
                     'location': 'México, DF',
                     'source': 'seccion_amarilla',
-                    'credit_potential': 'ALTO',
-                    'estimated_revenue': '$200,000 - $500,000',
-                    'loan_range': '$50,000 - $1,200,000',
+                    'credit_potential': self._assess_credit_potential(sector),
+                    'estimated_revenue': self._estimate_revenue(sector),
+                    'loan_range': self._estimate_loan_range(sector),
                     'extracted_at': datetime.now().isoformat(),
-                    'debug_results_type': '<class "business_row">'
+                    'debug_results_type': f'<class "business_row_{sector}">'  # <-- INCLUIR SECTOR
                 }
             
             return None
@@ -153,8 +187,8 @@ class GoogleMapsLeadScraper:
             logger.error(f"Error extrayendo de fila: {e}")
             return None
 
-    def _extract_from_phone_link(self, link, soup) -> Optional[Dict]:
-        """Extraer información del enlace de teléfono"""
+    def _extract_from_phone_link(self, link, soup, sector: str) -> Optional[Dict]:
+        """Extraer información del enlace de teléfono - ACTUALIZADA"""
         try:
             phone = link.get('href').replace('tel:', '').strip()
             
@@ -169,14 +203,14 @@ class GoogleMapsLeadScraper:
                         'phone': phone,
                         'email': None,
                         'address': "México, DF",
-                        'sector': 'Marketing/Publicidad',
+                        'sector': sector,  # <-- USAR SECTOR DINÁMICO
                         'location': 'México, DF',
                         'source': 'seccion_amarilla',
-                        'credit_potential': 'ALTO',
-                        'estimated_revenue': '$200,000 - $500,000',
-                        'loan_range': '$50,000 - $1,200,000',
+                        'credit_potential': self._assess_credit_potential(sector),
+                        'estimated_revenue': self._estimate_revenue(sector),
+                        'loan_range': self._estimate_loan_range(sector),
                         'extracted_at': datetime.now().isoformat(),
-                        'debug_results_type': '<class "phone_link">'
+                        'debug_results_type': f'<class "phone_link_{sector}">'
                     }
             
             return None
@@ -184,6 +218,38 @@ class GoogleMapsLeadScraper:
         except Exception as e:
             logger.error(f"Error extrayendo de enlace: {e}")
             return None
+
+    def _assess_credit_potential(self, sector: str) -> str:
+        """Evaluar potencial crediticio basado en sector"""
+        high_potential = ['Contadores', 'Abogados', 'Arquitectos', 'Ingenieros', 'Médicos']
+        medium_high = ['Marketing/Publicidad', 'Consultores', 'Dentistas']
+        
+        if sector in high_potential:
+            return 'ALTO'
+        elif sector in medium_high:
+            return 'MEDIO-ALTO'
+        else:
+            return 'MEDIO'
+
+    def _estimate_revenue(self, sector: str) -> str:
+        """Estimar ingresos basado en sector"""
+        if sector in ['Contadores', 'Abogados', 'Médicos']:
+            return '$400,000 - $1,200,000'
+        elif sector in ['Arquitectos', 'Ingenieros']:
+            return '$300,000 - $800,000'
+        elif sector in ['Marketing/Publicidad', 'Consultores']:
+            return '$200,000 - $600,000'
+        else:
+            return '$150,000 - $400,000'
+
+    def _estimate_loan_range(self, sector: str) -> str:
+        """Estimar rango de préstamo basado en sector"""
+        if sector in ['Contadores', 'Abogados', 'Médicos']:
+            return '$100,000 - $3,000,000'
+        elif sector in ['Arquitectos', 'Ingenieros']:
+            return '$75,000 - $2,000,000'
+        else:
+            return '$50,000 - $1,200,000'
 
     def _extract_phone(self, text: str) -> Optional[str]:
         """Extraer teléfono del texto"""
@@ -243,13 +309,12 @@ class GoogleMapsLeadScraper:
         except Exception as e:
             return None
 
-# Función para compatibilidad con el sistema existente
-# SOLO CAMBIAR ESTA FUNCIÓN en scrapers/seccion_amarilla_simple.py
-
+# Función para compatibilidad con el sistema existente - CORREGIDA
 def scrape_seccion_amarilla(url):
-    """Función de compatibilidad - USAR URL REAL"""
+    """Función compatible - AHORA USA URL REAL"""
     scraper = GoogleMapsLeadScraper()
     
+    # Ejecutar scraping síncrono
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
@@ -257,74 +322,9 @@ def scrape_seccion_amarilla(url):
         # IMPORTANTE: Usar la URL real que viene del request
         logger.info(f"🎯 URL recibida: {url}")
         
-        # NUEVA LÓGICA: Pasar la URL real al scraper
+        # NUEVA LÓGICA: Usar la URL real en lugar de ignorarla
         results = loop.run_until_complete(scraper.scrape_leads_from_url(url, 10))
         return results
     finally:
         loop.close()
-
-# Y AGREGAR ESTE MÉTODO a la clase GoogleMapsLeadScraper:
-
-async def scrape_leads_from_url(self, url: str, max_leads: int = 10) -> List[Dict]:
-    """Scrapear desde URL específica"""
-    try:
-        logger.info(f"🔥 Scraping URL específica: {url}")
-        
-        # USAR LA URL TAL COMO VIENE - NO HARDCODED
-        response = self.session.get(url, timeout=30)
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.content, 'html.parser')
-        leads = []
-        
-        # Determinar sector basado en URL
-        sector = self._extract_sector_from_url(url)
-        
-        # Buscar en filas de tabla
-        business_rows = soup.find_all('tr')
-        logger.info(f"📋 Filas encontradas: {len(business_rows)}")
-        
-        for row in business_rows:
-            lead = self._extract_from_business_row(row, sector)
-            if lead and len(leads) < max_leads:
-                leads.append(lead)
-                logger.info(f"✅ Lead extraído: {lead.get('name', 'Sin nombre')}")
-        
-        logger.info(f"🎯 Total leads de {sector}: {len(leads)}")
-        return leads
-        
-    except Exception as e:
-        logger.error(f"❌ Error scraping {url}: {e}")
-        return []
-
-def _extract_sector_from_url(self, url: str) -> str:
-    """Extraer sector de la URL"""
-    if 'contadores' in url:
-        return 'Contadores'
-    elif 'abogados' in url:
-        return 'Abogados'
-    elif 'marketing' in url:
-        return 'Marketing'
-    elif 'arquitectos' in url:
-        return 'Arquitectos'
-    else:
-        return 'Servicios Profesionales'
-
-def _extract_from_business_row(self, row, sector: str) -> Optional[Dict]:
-    """Actualizar para usar sector dinámico"""
-    # ... código existente hasta la parte del return ...
-    if name and phone and len(name) > 3:
-        return {
-            'name': name,
-            'phone': phone,
-            'email': None,
-            'address': address or "México, DF",
-            'sector': sector,  # <-- USAR SECTOR DINÁMICO
-            'location': 'México, DF',
-            'source': 'seccion_amarilla',
-            'credit_potential': 'ALTO',
-            'estimated_revenue': '$200,000 - $500,000',
-            'loan_range': '$50,000 - $1,200,000',
-            'extracted_at': datetime.now().isoformat(),
-            'debug_results_type': f'<class "business_row_{sector}">'  # <-- INCLUIR SECTOR
-        }
+   
