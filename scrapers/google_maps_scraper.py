@@ -126,27 +126,44 @@ class GoogleMapsLeadScraper:
             logger.error(f"❌ Error general: {e}")
             return []
 
-    async def _search_seccion_amarilla(self, category: str, location: str, max_results: int) -> List[Dict]:
-        """Buscar en Sección Amarilla"""
-        try:
-            # Construir URL de búsqueda
-            search_url = f"{self.base_url}/buscar/{category}/{location}"
-            
-            # Simular comportamiento humano
-            await asyncio.sleep(random.uniform(2, 5))
-            
-            response = self.session.get(search_url, timeout=20)
-            
-            if response.status_code != 200:
-                logger.warning(f"HTTP {response.status_code} para {search_url}")
-                return []
-            
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Extraer resultados
-            results = await self._extract_businesses(soup, max_results)
-            
-            return results
+     async def _search_seccion_amarilla(self, category: str, location: str, max_results: int) -> List[Dict]:
+    """Buscar en Sección Amarilla con URL específica"""
+    try:
+        # Mapear ubicaciones a formato de Sección Amarilla
+        location_mapping = {
+            'Querétaro': 'queretaro/zona-metropolitana',
+            'Ciudad de México': 'distrito-federal/zona-metropolitana',
+            'Guadalajara': 'jalisco/zona-metropolitana',
+            'Monterrey': 'nuevo-leon/zona-metropolitana'
+        }
+        
+        # Obtener ubicación formateada
+        formatted_location = location_mapping.get(location, 'queretaro/zona-metropolitana')
+        
+        # Construir URL específica
+        search_url = f"{self.base_url}/resultados/{category}/{formatted_location}/1"
+        
+        logger.info(f"🔍 Buscando en: {search_url}")
+        
+        # Simular comportamiento humano
+        await asyncio.sleep(random.uniform(2, 5))
+        
+        response = self.session.get(search_url, timeout=20)
+        
+        if response.status_code != 200:
+            logger.warning(f"HTTP {response.status_code} para {search_url}")
+            return []
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Extraer resultados
+        results = await self._extract_businesses(soup, max_results)
+        
+        return results
+        
+    except Exception as e:
+        logger.error(f"Error en búsqueda Sección Amarilla: {e}")
+        return []
             
         except Exception as e:
             logger.error(f"Error en búsqueda Sección Amarilla: {e}")
