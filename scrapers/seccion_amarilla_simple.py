@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Scraper simple para Sección Amarilla - SIN ERRORES DE INDENTACIÓN
+Scraper simple para Sección Amarilla
 """
 
 import asyncio
@@ -18,8 +18,6 @@ logger = logging.getLogger(__name__)
 class GoogleMapsLeadScraper:
     def __init__(self):
         self.session = requests.Session()
-        self.base_url = "https://www.seccionamarilla.com.mx"
-        
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         })
@@ -39,7 +37,6 @@ class GoogleMapsLeadScraper:
         try:
             logger.info(f"🎯 Iniciando scraping: {sector} en {location}")
             
-            # URL específica de prueba
             test_url = "https://www.seccionamarilla.com.mx/resultados/agencias-de-marketing/distrito-federal/zona-metropolitana/1"
             
             logger.info(f"🔍 Probando URL: {test_url}")
@@ -54,71 +51,68 @@ class GoogleMapsLeadScraper:
             
             soup = BeautifulSoup(response.content, 'html.parser')
             
-         # Buscar contenedores de negocios
-business_elements = soup.find_all('div', class_='container_out')
-
-if not business_elements:
-    # Buscar por otros selectores
-    business_elements = soup.find_all('div', attrs={'id': True})
-
-if not business_elements:
-    # Buscar cualquier div que contenga texto de teléfono
-    business_elements = soup.find_all('div', string=re.compile(r'\(\d{2,3}\)\d{3}-\d{4}'))
-
-logger.info(f"📊 Encontrados {len(business_elements)} elementos")
-
-leads = []
-
-for i, element in enumerate(business_elements[:max_leads]):
-    try:
-        # Extraer texto completo
-        text_content = element.get_text()
-        
-        if len(text_content) > 10:
-            # Buscar nombre del negocio
-            name = ""
-            lines = text_content.split('\n')
-            for line in lines:
-                line = line.strip()
-                if len(line) > 3 and not line.isdigit() and '(' not in line:
-                    name = line
-                    break
+            # Buscar contenedores de negocios
+            business_elements = soup.find_all('div', class_='container_out')
             
-            # Buscar teléfono con formato mexicano
-            phone_patterns = [
-                r'\(\d{2,3}\)\d{3}-\d{4}',
-                r'\(\d{2,3}\)\d{3}\d{4}',
-                r'\d{2,3}-\d{3}-\d{4}'
-            ]
+            if not business_elements:
+                business_elements = soup.find_all('div', attrs={'id': True})
             
-            phone = ""
-            for pattern in phone_patterns:
-                phone_match = re.search(pattern, text_content)
-                if phone_match:
-                    phone = phone_match.group()
-                    break
+            if not business_elements:
+                business_elements = soup.find_all('div', string=re.compile(r'\(\d{2,3}\)\d{3}-\d{4}'))
             
-            if name and phone:
-                lead = {
-                    'name': name,
-                    'phone': phone,
-                    'email': f"{name.lower().replace(' ', '.')}@gmail.com",
-                    'address': f"Zona Metropolitana, Distrito Federal",
-                    'sector': sector,
-                    'location': location,
-                    'source': 'Sección Amarilla',
-                    'credit_potential': 'ALTO',
-                    'estimated_revenue': '$200,000 - $500,000',
-                    'loan_range': '$500,000 - $1,200,000',
-                    'extracted_at': datetime.now().isoformat()
-                }
+            logger.info(f"📊 Encontrados {len(business_elements)} elementos")
+            
+            leads = []
+            
+            for i, element in enumerate(business_elements[:max_leads]):
+                try:
+                    text_content = element.get_text()
+                    
+                    if len(text_content) > 10:
+                        # Buscar nombre del negocio
+                        name = ""
+                        lines = text_content.split('\n')
+                        for line in lines:
+                            line = line.strip()
+                            if len(line) > 3 and not line.isdigit() and '(' not in line:
+                                name = line
+                                break
+                        
+                        # Buscar teléfono con formato mexicano
+                        phone_patterns = [
+                            r'\(\d{2,3}\)\d{3}-\d{4}',
+                            r'\(\d{2,3}\)\d{3}\d{4}',
+                            r'\d{2,3}-\d{3}-\d{4}'
+                        ]
+                        
+                        phone = ""
+                        for pattern in phone_patterns:
+                            phone_match = re.search(pattern, text_content)
+                            if phone_match:
+                                phone = phone_match.group()
+                                break
+                        
+                        if name and phone:
+                            lead = {
+                                'name': name,
+                                'phone': phone,
+                                'email': f"{name.lower().replace(' ', '.')}@gmail.com",
+                                'address': "Zona Metropolitana, Distrito Federal",
+                                'sector': sector,
+                                'location': location,
+                                'source': 'Sección Amarilla',
+                                'credit_potential': 'ALTO',
+                                'estimated_revenue': '$200,000 - $500,000',
+                                'loan_range': '$500,000 - $1,200,000',
+                                'extracted_at': datetime.now().isoformat()
+                            }
+                            
+                            leads.append(lead)
+                            logger.info(f"✅ Lead {i+1}: {name} - {phone}")
                 
-                leads.append(lead)
-                logger.info(f"✅ Lead {i+1}: {name} - {phone}")
-    
-    except Exception as e:
-        logger.warning(f"Error procesando elemento {i+1}: {e}")
-        continue
+                except Exception as e:
+                    logger.warning(f"Error procesando elemento {i+1}: {e}")
+                    continue
             
             logger.info(f"✅ Total leads extraídos: {len(leads)}")
             return leads
@@ -126,17 +120,3 @@ for i, element in enumerate(business_elements[:max_leads]):
         except Exception as e:
             logger.error(f"❌ Error general: {e}")
             return []
-
-    def _generate_email(self, name: str) -> str:
-        if not name:
-            return ""
-        
-        clean_name = re.sub(r'[^a-zA-Z\s]', '', name.lower())
-        words = clean_name.split()
-        
-        if len(words) >= 2:
-            return f"{words[0]}.{words[1]}@gmail.com"
-        elif len(words) == 1:
-            return f"{words[0]}@gmail.com"
-        
-        return ""
