@@ -19,7 +19,7 @@ try:
     from database import job_db
 except ImportError:
     job_db = None
-from scrapers.google_maps_scraper import GoogleMapsLeadScraper
+from scrapers.seccion_amarilla_simple import GoogleMapsLeadScraper
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
