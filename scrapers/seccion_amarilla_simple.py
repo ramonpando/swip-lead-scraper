@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Scraper completo funcional para Sección Amarilla
-CON URL DINÁMICA - Sin errores de indentación
+CON 15 CATEGORÍAS HARDCODEADAS DE ALTO VALOR
 """
 
 import asyncio
@@ -18,7 +18,7 @@ import re
 logger = logging.getLogger(__name__)
 
 class GoogleMapsLeadScraper:
-    """Scraper funcional para Sección Amarilla con URL dinámica"""
+    """Scraper funcional para Sección Amarilla con 15 categorías hardcodeadas"""
     
     def __init__(self):
         self.session = requests.Session()
@@ -43,27 +43,85 @@ class GoogleMapsLeadScraper:
     async def test_single_search(self, sector: str, location: str, max_results: int = 1) -> List[Dict]:
         return await self.scrape_leads(sector, location, max_results)
 
-   async def scrape_leads(self, sector: str, location: str, max_leads: int = 10) -> List[Dict]:
-    try:
-        logger.info(f"🔥 Iniciando scraping: {sector} en {location}")
-        logger.info(f"🎯 Objetivo: {max_leads} leads")
-        
-        # CONSTRUIR URL DINÁMICA BASADA EN SECTOR
-        if "contadores" in sector.lower():
-            url = "https://www.seccionamarilla.com.mx/resultados/contadores/distrito-federal/zona-metropolitana/1"
-        elif "abogados" in sector.lower():
-            url = "https://www.seccionamarilla.com.mx/resultados/abogados/distrito-federal/zona-metropolitana/1"
-        else:
-            url = "https://www.seccionamarilla.com.mx/resultados/agencias-de-marketing/distrito-federal/zona-metropolitana/1"
-        
-        logger.info(f"📍 URL construida dinámicamente: {url}")
-        
-        # Ejecutar scraping
-        return await self.scrape_leads_from_url(url, max_leads)
-        
-    except Exception as e:
-        logger.error(f"❌ Error en scraping: {e}")
-        return []
+    async def scrape_leads(self, sector: str, location: str, max_leads: int = 10) -> List[Dict]:
+        try:
+            logger.info(f"🔥 Iniciando scraping: {sector} en {location}")
+            logger.info(f"🎯 Objetivo: {max_leads} leads")
+            
+            # URLS HARDCODEADAS PARA CATEGORÍAS DE ALTO VALOR
+            if "contadores" in sector.lower() or "contador" in sector.lower():
+                url = "https://www.seccionamarilla.com.mx/resultados/contadores/distrito-federal/zona-metropolitana/1"
+                logger.info("📊 CATEGORÍA: Contadores")
+                
+            elif "abogados" in sector.lower() or "abogado" in sector.lower():
+                url = "https://www.seccionamarilla.com.mx/resultados/abogados/distrito-federal/zona-metropolitana/1"
+                logger.info("⚖️ CATEGORÍA: Abogados")
+                
+            elif "arquitectos" in sector.lower() or "arquitecto" in sector.lower():
+                url = "https://www.seccionamarilla.com.mx/resultados/arquitectos/distrito-federal/zona-metropolitana/1"
+                logger.info("🏗️ CATEGORÍA: Arquitectos")
+                
+            elif "medicos" in sector.lower() or "medico" in sector.lower() or "doctor" in sector.lower():
+                url = "https://www.seccionamarilla.com.mx/resultados/medicos/distrito-federal/zona-metropolitana/1"
+                logger.info("👨‍⚕️ CATEGORÍA: Médicos")
+                
+            elif "dentistas" in sector.lower() or "dentista" in sector.lower():
+                url = "https://www.seccionamarilla.com.mx/resultados/dentistas/distrito-federal/zona-metropolitana/1"
+                logger.info("🦷 CATEGORÍA: Dentistas")
+                
+            elif "ingenieros" in sector.lower() or "ingeniero" in sector.lower():
+                url = "https://www.seccionamarilla.com.mx/resultados/ingenieros/distrito-federal/zona-metropolitana/1"
+                logger.info("🔧 CATEGORÍA: Ingenieros")
+                
+            elif "consultores" in sector.lower() or "consultor" in sector.lower():
+                url = "https://www.seccionamarilla.com.mx/resultados/consultores/distrito-federal/zona-metropolitana/1"
+                logger.info("💼 CATEGORÍA: Consultores")
+                
+            elif "publicidad" in sector.lower():
+                url = "https://www.seccionamarilla.com.mx/resultados/agencias-de-publicidad/distrito-federal/zona-metropolitana/1"
+                logger.info("📢 CATEGORÍA: Publicidad")
+                
+            elif "notarios" in sector.lower() or "notario" in sector.lower():
+                url = "https://www.seccionamarilla.com.mx/resultados/notarios/distrito-federal/zona-metropolitana/1"
+                logger.info("📜 CATEGORÍA: Notarios")
+                
+            elif "veterinarios" in sector.lower() or "veterinario" in sector.lower():
+                url = "https://www.seccionamarilla.com.mx/resultados/veterinarios/distrito-federal/zona-metropolitana/1"
+                logger.info("🐕 CATEGORÍA: Veterinarios")
+                
+            elif "restaurantes" in sector.lower() or "restaurante" in sector.lower():
+                url = "https://www.seccionamarilla.com.mx/resultados/restaurantes/distrito-federal/zona-metropolitana/1"
+                logger.info("🍽️ CATEGORÍA: Restaurantes")
+                
+            elif "farmacias" in sector.lower() or "farmacia" in sector.lower():
+                url = "https://www.seccionamarilla.com.mx/resultados/farmacias/distrito-federal/zona-metropolitana/1"
+                logger.info("💊 CATEGORÍA: Farmacias")
+                
+            elif "talleres" in sector.lower() or "taller" in sector.lower():
+                url = "https://www.seccionamarilla.com.mx/resultados/talleres-automotrices/distrito-federal/zona-metropolitana/1"
+                logger.info("🔧 CATEGORÍA: Talleres Automotrices")
+                
+            elif "inmobiliarias" in sector.lower() or "inmobiliaria" in sector.lower():
+                url = "https://www.seccionamarilla.com.mx/resultados/inmobiliarias/distrito-federal/zona-metropolitana/1"
+                logger.info("🏠 CATEGORÍA: Inmobiliarias")
+                
+            elif "ferreterias" in sector.lower() or "ferreteria" in sector.lower():
+                url = "https://www.seccionamarilla.com.mx/resultados/ferreterias/distrito-federal/zona-metropolitana/1"
+                logger.info("🔨 CATEGORÍA: Ferreterías")
+                
+            # DEFAULT: Marketing (categoría original que sabemos que funciona)
+            else:
+                url = "https://www.seccionamarilla.com.mx/resultados/agencias-de-marketing/distrito-federal/zona-metropolitana/1"
+                logger.info("🎯 CATEGORÍA: Marketing (Default)")
+            
+            logger.info(f"📍 URL construida: {url}")
+            
+            # Ejecutar scraping con URL específica
+            return await self.scrape_leads_from_url(url, max_leads)
+            
+        except Exception as e:
+            logger.error(f"❌ Error en scraping: {e}")
+            return []
 
     async def scrape_leads_from_url(self, url: str, max_leads: int = 10) -> List[Dict]:
         """Scrapear desde URL específica"""
@@ -116,10 +174,34 @@ class GoogleMapsLeadScraper:
             return 'Contadores'
         elif 'abogados' in url.lower():
             return 'Abogados'
-        elif 'marketing' in url.lower():
-            return 'Marketing/Publicidad'
         elif 'arquitectos' in url.lower():
             return 'Arquitectos'
+        elif 'medicos' in url.lower():
+            return 'Médicos'
+        elif 'dentistas' in url.lower():
+            return 'Dentistas'
+        elif 'ingenieros' in url.lower():
+            return 'Ingenieros'
+        elif 'consultores' in url.lower():
+            return 'Consultores'
+        elif 'publicidad' in url.lower():
+            return 'Publicidad'
+        elif 'notarios' in url.lower():
+            return 'Notarios'
+        elif 'veterinarios' in url.lower():
+            return 'Veterinarios'
+        elif 'restaurantes' in url.lower():
+            return 'Restaurantes'
+        elif 'farmacias' in url.lower():
+            return 'Farmacias'
+        elif 'talleres' in url.lower():
+            return 'Talleres Automotrices'
+        elif 'inmobiliarias' in url.lower():
+            return 'Inmobiliarias'
+        elif 'ferreterias' in url.lower():
+            return 'Ferreterías'
+        elif 'marketing' in url.lower():
+            return 'Marketing/Publicidad'
         else:
             return 'Servicios Profesionales'
 
@@ -205,25 +287,37 @@ class GoogleMapsLeadScraper:
 
     def _assess_credit_potential(self, sector: str) -> str:
         """Evaluar potencial crediticio basado en sector"""
-        high_potential = ['Contadores', 'Abogados', 'Arquitectos']
+        high_potential = ['Contadores', 'Abogados', 'Arquitectos', 'Médicos', 'Ingenieros']
+        medium_high = ['Dentistas', 'Consultores', 'Notarios', 'Inmobiliarias']
+        
         if sector in high_potential:
             return 'ALTO'
-        else:
+        elif sector in medium_high:
             return 'MEDIO-ALTO'
+        else:
+            return 'MEDIO'
 
     def _estimate_revenue(self, sector: str) -> str:
         """Estimar ingresos basado en sector"""
-        if sector in ['Contadores', 'Abogados']:
+        if sector in ['Contadores', 'Abogados', 'Médicos']:
+            return '$500,000 - $1,500,000'
+        elif sector in ['Arquitectos', 'Ingenieros', 'Notarios']:
             return '$400,000 - $1,200,000'
+        elif sector in ['Dentistas', 'Consultores', 'Inmobiliarias']:
+            return '$300,000 - $800,000'
         else:
             return '$200,000 - $600,000'
 
     def _estimate_loan_range(self, sector: str) -> str:
         """Estimar rango de préstamo basado en sector"""
-        if sector in ['Contadores', 'Abogados']:
+        if sector in ['Contadores', 'Abogados', 'Médicos']:
+            return '$125,000 - $3,750,000'
+        elif sector in ['Arquitectos', 'Ingenieros', 'Notarios']:
             return '$100,000 - $3,000,000'
+        elif sector in ['Dentistas', 'Consultores', 'Inmobiliarias']:
+            return '$75,000 - $2,000,000'
         else:
-            return '$50,000 - $1,200,000'
+            return '$50,000 - $1,500,000'
 
     def _extract_phone(self, text: str) -> Optional[str]:
         """Extraer teléfono del texto"""
@@ -292,4 +386,3 @@ def scrape_seccion_amarilla(url):
         return results
     finally:
         loop.close()
-   
