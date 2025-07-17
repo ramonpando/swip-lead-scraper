@@ -63,7 +63,7 @@ class GoogleMapsLeadScraper:
             ]
         }
     def setup_driver(self):
-    """Configura Chrome con undetected-chromedriver"""
+    # Configura Chrome con undetected-chromedriver
     try:
         # Configurar opciones básicas
         options = uc.ChromeOptions()
