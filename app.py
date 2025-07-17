@@ -240,7 +240,8 @@ async def get_job_results(job_id: str):
                 "status": "failed",
                 "message": "Job falló"
             }
-        elif job["status"] == "completed":
+        
+     elif job["status"] == "completed":
     results = job.get("results", [])
     # Manejo seguro de None
     if results is None:
