@@ -35,38 +35,28 @@ class GoogleMapsLeadScraper:
         })
         
         # Mapeo de sectores a categorías de Sección Amarilla
-        self.sector_categories = {
-            'Restaurantes': [
-                'restaurantes',
-                'comida-rapida',
-                'tacos',
-                'comida-mexicana'
-            ],
-            'Talleres': [
-                'talleres-mecanicos',
-                'hojalaterias',
-                'talleres-electricos',
-                'servicio-automotriz'
-            ],
-            'Comercio': [
-                'tiendas-ropa',
-                'zapaterias',
-                'ferreterias',
-                'papelerias'
-            ],
-            'Servicios': [
-                'esteticas',
-                'salones-belleza',
-                'barberias',
-                'servicios-profesionales'
-            ],
-            'Producción': [
-                'panaderias',
-                'tortillerias',
-                'carnes',
-                'frutas-verduras'
-            ]
-        }
+       self.sector_categories = {
+    'Restaurantes': [
+        'restaurantes',
+        'comida-rapida',
+        'restaurantes-mexicanos'
+    ],
+    'Talleres': [
+        'talleres-mecanicos',
+        'talleres-automotrices',
+        'servicio-automotriz'
+    ],
+    'Comercio': [
+        'tiendas-departamentales',
+        'comercio-al-por-menor',
+        'tiendas-especializadas'
+    ],
+    'Servicios': [
+        'servicios-profesionales',
+        'agencias-de-marketing',
+        'servicios-empresariales'
+    ]
+}
 
     def test_connection(self) -> bool:
         """Testa la conexión a Sección Amarilla"""
