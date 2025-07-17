@@ -43,20 +43,63 @@ class GoogleMapsLeadScraper:
     async def test_single_search(self, sector: str, location: str, max_results: int = 1) -> List[Dict]:
         return await self.scrape_leads(sector, location, max_results)
 
-    async def scrape_leads(self, sector: str, location: str, max_leads: int = 10) -> List[Dict]:
+   async def scrape_leads(self, sector: str, location: str, max_leads: int = 10) -> List[Dict]:
         try:
             logger.info(f"🔥 Iniciando scraping: {sector} en {location}")
             logger.info(f"🎯 Objetivo: {max_leads} leads")
             
-            if "contadores" in sector.lower():
-                url = "https://www.seccionamarilla.com.mx/resultados/contadores/distrito-federal/zona-metropolitana/1"
+            # CALCULAR PÁGINA AUTOMÁTICAMENTE BASADO EN TIEMPO
+            from datetime import datetime
+            now = datetime.now()
+            
+            # Rotación cada 2 horas: página 1-10
+            hours_since_start = now.hour + (now.day * 24)
+            page_number = (hours_since_start // 2) % 10 + 1
+            
+            logger.info(f"🕐 Hora actual: {now.hour}:00")
+            logger.info(f"📄 Página calculada automáticamente: {page_number}")
+            
+            # CONSTRUIR URL CON PÁGINA DINÁMICA
+            if "contadores" in sector.lower() or "contador" in sector.lower():
+                base_url = "https://www.seccionamarilla.com.mx/resultados/contadores/distrito-federal/zona-metropolitana"
+                url = f"{base_url}/{page_number}"
                 logger.info("📊 CATEGORÍA: Contadores")
+                
+            elif "abogados" in sector.lower() or "abogado" in sector.lower():
+                base_url = "https://www.seccionamarilla.com.mx/resultados/abogados/distrito-federal/zona-metropolitana"
+                url = f"{base_url}/{page_number}"
+                logger.info("⚖️ CATEGORÍA: Abogados")
+                
+            elif "arquitectos" in sector.lower() or "arquitecto" in sector.lower():
+                base_url = "https://www.seccionamarilla.com.mx/resultados/arquitectos/distrito-federal/zona-metropolitana"
+                url = f"{base_url}/{page_number}"
+                logger.info("🏗️ CATEGORÍA: Arquitectos")
+                
+            elif "medicos" in sector.lower() or "medico" in sector.lower():
+                base_url = "https://www.seccionamarilla.com.mx/resultados/medicos/distrito-federal/zona-metropolitana"
+                url = f"{base_url}/{page_number}"
+                logger.info("👨‍⚕️ CATEGORÍA: Médicos")
+                
+            elif "dentistas" in sector.lower() or "dentista" in sector.lower():
+                base_url = "https://www.seccionamarilla.com.mx/resultados/dentistas/distrito-federal/zona-metropolitana"
+                url = f"{base_url}/{page_number}"
+                logger.info("🦷 CATEGORÍA: Dentistas")
+                
+            # DEFAULT: Marketing
             else:
-                url = "https://www.seccionamarilla.com.mx/resultados/agencias-de-marketing/distrito-federal/zona-metropolitana/1"
+                base_url = "https://www.seccionamarilla.com.mx/resultados/agencias-de-marketing/distrito-federal/zona-metropolitana"
+                url = f"{base_url}/{page_number}"
                 logger.info("🎯 CATEGORÍA: Marketing (Default)")
             
-            logger.info(f"📍 URL construida: {url}")
-            return await self.scrape_leads_from_url(url, max_leads)
+            logger.info(f"📍 URL con paginación: {url}")
+            
+            # Ejecutar scraping
+            leads = await self.scrape_leads_from_url(url, max_leads)
+            
+            # Log adicional para tracking
+            logger.info(f"📊 RESUMEN: Página {page_number} de {sector} = {len(leads)} leads")
+            
+            return leads
             
         except Exception as e:
             logger.error(f"❌ Error en scraping: {e}")
