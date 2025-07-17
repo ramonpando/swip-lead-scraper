@@ -15,7 +15,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 # Importar nuestros módulos
-from database import job_db
+try:
+    from database import job_db
+except ImportError:
+    job_db = None
 from scrapers.google_maps_scraper import GoogleMapsLeadScraper
 
 # Configurar logging
@@ -173,6 +176,9 @@ async def start_scraping(
         
         if not job_id:
             raise HTTPException(status_code=500, detail="Error creando job")
+
+        if job_db is None:
+            raise HTTPException(status_code=500, detail="Database not available")
         
         # Ejecutar scraping en background
         background_tasks.add_task(run_scraping_job, job_id, request)
