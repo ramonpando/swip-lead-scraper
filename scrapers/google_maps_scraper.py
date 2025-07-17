@@ -62,7 +62,6 @@ class GoogleMapsLeadScraper:
                 "manufactura Querétaro"
             ]
         }
-
     def setup_driver(self):
     """Configura Chrome con undetected-chromedriver"""
     try:
