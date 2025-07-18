@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Scraper completo funcional para Sección Amarilla
-CON PAGINACIÓN AUTOMÁTICA Y FIX ESPECÍFICO PARA ESTRUCTURA HTML
+CON PAGINACIÓN AUTOMÁTICA Y FIX COMPLETO DE TELÉFONOS Y NOMBRES
 """
 
 import asyncio
@@ -18,7 +18,7 @@ import re
 logger = logging.getLogger(__name__)
 
 class GoogleMapsLeadScraper:
-    """Scraper funcional para Sección Amarilla con estructura específica"""
+    """Scraper funcional para Sección Amarilla con extracción perfecta"""
     
     def __init__(self):
         self.session = requests.Session()
@@ -188,30 +188,27 @@ class GoogleMapsLeadScraper:
             return 'Servicios Profesionales'
 
     def _extract_from_business_row(self, row, sector: str) -> Optional[Dict]:
-        """Extraer información - ESPECÍFICO para estructura Sección Amarilla"""
+        """Extraer información - MEJORADO para teléfonos y nombres"""
         try:
-            # Buscar estructura específica: título + dirección + teléfono
             name = None
             address = None
             phone = None
             
             # MÉTODO 1: Buscar por jerarquía de elementos HTML
-            # Buscar título principal (usualmente H2, H3 o elemento con clase específica)
             title_elements = row.find_all(['h1', 'h2', 'h3', 'h4'])
             for title in title_elements:
                 title_text = title.get_text(strip=True)
                 if len(title_text) > 3 and not any(skip in title_text.lower() for skip in ['abierto', 'cerrado', 'ubicación']):
-                    name = title_text
+                    name = self._clean_business_name(title_text)
                     break
             
-            # MÉTODO 2: Si no hay títulos, buscar por estructura de celdas
+            # MÉTODO 2: Buscar en celdas si no hay títulos
             if not name:
                 cells = row.find_all(['td', 'th'])
                 
-                for i, cell in enumerate(cells):
+                for cell in cells:
                     cell_text = cell.get_text(strip=True)
                     
-                    # Skip celdas vacías
                     if len(cell_text) < 4:
                         continue
                     
@@ -219,45 +216,34 @@ class GoogleMapsLeadScraper:
                     if re.match(r'^\(\d+\)', cell_text) or re.match(r'^\d{10}', cell_text):
                         continue
                     
-                    # DETECTAR ESTRUCTURA: Primera línea = nombre, Segunda línea = dirección
+                    # Detectar líneas separadas
                     lines = cell_text.split('\n')
                     if len(lines) >= 2:
-                        # Primera línea = nombre de empresa
                         potential_name = lines[0].strip()
                         potential_address = lines[1].strip()
                         
-                        # Validar que la primera línea es nombre (no dirección)
                         if not self._is_address_line(potential_name) and len(potential_name) > 3:
-                            name = potential_name
+                            name = self._clean_business_name(potential_name)
                             if self._is_address_line(potential_address):
                                 address = potential_address
                             break
                     
-                    # MÉTODO ALTERNATIVO: Si no hay saltos de línea, buscar patrón nombre + dirección
+                    # Si no hay líneas separadas, limpiar texto mixto
                     elif not name:
-                        clean_name = self._extract_name_from_mixed_text(cell_text)
-                        if clean_name:
+                        clean_name = self._clean_business_name(cell_text)
+                        if clean_name and len(clean_name) > 3:
                             name = clean_name
-                            # El resto sería dirección
-                            remaining = cell_text.replace(clean_name, '').strip()
-                            if remaining and self._is_address_line(remaining):
-                                address = remaining
+                            break
             
-            # Buscar teléfono en enlaces tel: o en texto
-            phone_links = row.find_all('a', href=re.compile(r'tel:'))
-            if phone_links:
-                phone = phone_links[0].get('href').replace('tel:', '').strip()
-            else:
-                # Buscar teléfono en texto general
-                row_text = row.get_text()
-                phone = self._extract_phone(row_text)
+            # BUSCAR TELÉFONO - MEJORADO
+            phone = self._extract_phone_robust(row)
             
-            # Si no encontramos dirección separada, buscarla en toda la fila
+            # Buscar dirección si no la tenemos
             if not address:
                 address = self._extract_address_from_row(row)
             
-            # Validar que tenemos datos mínimos
-            if name and phone and len(name) > 3:
+            # Solo devolver si tenemos datos válidos
+            if name and phone and len(name) > 3 and phone != "#ERROR!":
                 return {
                     'name': name,
                     'phone': phone,
@@ -278,6 +264,139 @@ class GoogleMapsLeadScraper:
         except Exception as e:
             logger.error(f"Error extrayendo de fila: {e}")
             return None
+
+    def _clean_business_name(self, text: str) -> Optional[str]:
+        """Limpiar nombre de empresa de direcciones y números"""
+        try:
+            if not text or len(text) < 3:
+                return None
+            
+            # Patrones que indican donde termina el nombre
+            end_patterns = [
+                # Números que indican dirección
+                r'\s+\d{1,4}\s*(?:NO\.|NUM\.|#|LOC|LOCAL)',  # 293, 251 LOC A
+                r'\s+\d{1,4}\s*(?:CALLE|AV\.|COL\.)',       # 293 CALLE
+                r'\s+\d{1,4}\s*(?:MZ|LT)',                  # 8 MZ, 20 LT
+                
+                # Direcciones específicas
+                r'\s+(?:LERMA|ORIENTAL|AGRICOLA)\s+\d+',    # LERMA 293
+                r'\s+(?:CALLE|AV\.|AVENIDA|BLVD)',          # CALLE PRINCIPAL
+                r'\s+(?:COL\.|COLONIA)',                    # COL. CENTRO
+                r'\s+(?:NO\.|NUM\.)\s*\d+',                 # NO. 123
+                r'\s+LOC\s*[A-Z]',                          # LOC A
+                r'\s+LOCAL\s*\d*',                          # LOCAL 5
+                
+                # Ubicaciones específicas mexicanas
+                r'\s+(?:DF|CDMX|MEX|MEXICO)\s*,?\s*C\.?P\.?', # DF, C.P.
+                r'\s+(?:CUAUHTEMOC|BENITO|JUAREZ)',         # Delegaciones
+                
+                # Patrones numéricos al final
+                r'\s+\d{2,4}$',                             # Solo números al final
+            ]
+            
+            clean_text = text.strip()
+            
+            # Buscar donde cortar el nombre
+            for pattern in end_patterns:
+                match = re.search(pattern, clean_text, re.IGNORECASE)
+                if match:
+                    clean_text = clean_text[:match.start()].strip()
+                    break
+            
+            # Limpiezas adicionales
+            clean_text = re.sub(r'\s+Y\s*$', '', clean_text, flags=re.IGNORECASE)  # Y al final
+            clean_text = re.sub(r'\s*,\s*$', '', clean_text)                       # Coma final
+            clean_text = re.sub(r'\s+$', '', clean_text)                           # Espacios finales
+            
+            # Verificar que el resultado sea válido
+            if len(clean_text) >= 3 and not self._is_address_line(clean_text):
+                return clean_text
+            
+            return None
+            
+        except Exception as e:
+            return None
+
+    def _extract_phone_robust(self, row) -> Optional[str]:
+        """Extraer teléfono de forma más robusta"""
+        try:
+            # MÉTODO 1: Buscar enlaces tel: (más confiable)
+            phone_links = row.find_all('a', href=re.compile(r'tel:'))
+            for link in phone_links:
+                phone = link.get('href').replace('tel:', '').strip()
+                if phone and len(phone) >= 10:
+                    return self._format_phone(phone)
+            
+            # MÉTODO 2: Buscar en texto de botones o elementos específicos
+            phone_buttons = row.find_all(['button', 'span', 'div'], class_=re.compile(r'phone|tel|contact', re.I))
+            for button in phone_buttons:
+                phone_text = button.get_text(strip=True)
+                phone = self._extract_phone(phone_text)
+                if phone:
+                    return phone
+            
+            # MÉTODO 3: Buscar en todo el texto de la fila
+            row_text = row.get_text()
+            phone = self._extract_phone(row_text)
+            if phone:
+                return phone
+            
+            # MÉTODO 4: Buscar en atributos de datos
+            phone_elements = row.find_all(attrs={'data-phone': True})
+            for elem in phone_elements:
+                phone = elem.get('data-phone', '').strip()
+                if phone:
+                    return self._format_phone(phone)
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error extrayendo teléfono: {e}")
+            return None
+
+    def _format_phone(self, phone: str) -> str:
+        """Formatear teléfono de manera consistente"""
+        try:
+            # Limpiar caracteres no numéricos excepto paréntesis y guiones
+            clean_phone = re.sub(r'[^\d\(\)\-]', '', phone)
+            
+            # Si tiene formato (XX)XXXX-XXXX, mantenerlo
+            if re.match(r'\(\d{2,3}\)\d{3,4}-?\d{4}', clean_phone):
+                return clean_phone
+            
+            # Si son solo números, formatear
+            numbers_only = re.sub(r'[^\d]', '', clean_phone)
+            if len(numbers_only) == 10:
+                return f"({numbers_only[:2]}){numbers_only[2:6]}-{numbers_only[6:]}"
+            elif len(numbers_only) == 11:
+                return f"({numbers_only[:3]}){numbers_only[3:7]}-{numbers_only[7:]}"
+            
+            return clean_phone
+            
+        except Exception as e:
+            return phone
+
+    def _extract_phone(self, text: str) -> Optional[str]:
+        """Extraer teléfono del texto - MEJORADO"""
+        if not text:
+            return None
+        
+        # Patrones más específicos para teléfonos mexicanos
+        patterns = [
+            r'\(\d{2,3}\)\s*\d{3,4}[-\s]?\d{4}',      # (55)1234-5678 o (555)123-4567
+            r'\d{2,3}[-\s]\d{3,4}[-\s]\d{4}',         # 55-1234-5678
+            r'\b\d{10}\b',                             # 5512345678 (exactamente 10 dígitos)
+            r'\b\d{11}\b',                             # 55512345678 (11 dígitos con lada)
+        ]
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, text)
+            for match in matches:
+                # Verificar que no sea un número de dirección o código postal
+                if not re.search(r'(MZ|LT|NO\.|NUM\.|C\.P\.)', text[max(0, text.find(match)-10):text.find(match)+len(match)+10]):
+                    return self._format_phone(match)
+        
+        return None
 
     def _is_address_line(self, text: str) -> bool:
         """Detectar si una línea es dirección"""
@@ -312,46 +431,11 @@ class GoogleMapsLeadScraper:
         
         return False
 
-    def _extract_name_from_mixed_text(self, text: str) -> Optional[str]:
-        """Extraer nombre cuando está mezclado con dirección"""
-        try:
-            # Buscar donde empieza la dirección
-            address_start_patterns = [
-                r'\b(GUADALUPE|VICTORIA|CUAUHTEMOC|IZTLAHUACAN)',
-                r'\b(BARRANCA|BELLAVISTA|VIVEROS|ROSEDAL)',
-                r'\b(RIO|TIBER|MONTEBELLO|CONJUNTO)',
-                r'\bMZ\s+\d+',
-                r'\bLT\s+\d+',
-                r'\b\d+\s+(NO\.|NUM\.)',
-                r'\bCOL\.',
-                r'\bAV\.',
-                r'\bCALLE\s+\w+'
-            ]
-            
-            earliest_pos = len(text)
-            
-            for pattern in address_start_patterns:
-                match = re.search(pattern, text, re.IGNORECASE)
-                if match and match.start() < earliest_pos:
-                    earliest_pos = match.start()
-            
-            if earliest_pos < len(text):
-                name = text[:earliest_pos].strip()
-                # Limpiar caracteres finales
-                name = re.sub(r'[,\-\s]+$', '', name)
-                
-                if len(name) > 3:
-                    return name
-            
-            return None
-            
-        except Exception as e:
-            return None
-
     def _extract_from_phone_link(self, link, soup, sector: str) -> Optional[Dict]:
         """Extraer información del enlace de teléfono"""
         try:
             phone = link.get('href').replace('tel:', '').strip()
+            phone = self._format_phone(phone)
             
             container = link.find_parent(['tr', 'div', 'td'])
             if container:
@@ -359,7 +443,7 @@ class GoogleMapsLeadScraper:
                 
                 if name and phone:
                     # Limpiar nombre si contiene dirección
-                    clean_name = self._extract_name_from_mixed_text(name)
+                    clean_name = self._clean_business_name(name)
                     if clean_name:
                         name = clean_name
                     
@@ -417,21 +501,6 @@ class GoogleMapsLeadScraper:
             return '$75,000 - $2,000,000'
         else:
             return '$50,000 - $1,500,000'
-
-    def _extract_phone(self, text: str) -> Optional[str]:
-        """Extraer teléfono del texto"""
-        patterns = [
-            r'\(\d{2,3}\)\d{3,4}-?\d{4}',
-            r'\d{10}',
-            r'\d{3}[-.\s]?\d{3}[-.\s]?\d{4}',
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, text)
-            if match:
-                return match.group()
-        
-        return None
 
     def _extract_address_from_row(self, row) -> Optional[str]:
         """Extraer dirección de la fila - MEJORADO"""
