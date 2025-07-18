@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Scraper completo funcional para Sección Amarilla
-CON PAGINACIÓN AUTOMÁTICA Y FIX COMPLETO DE TELÉFONOS Y NOMBRES
+CON LÓGICA DE LÍNEAS SEPARADAS: LÍNEA 1 = NOMBRE, LÍNEA 2 = DIRECCIÓN
 """
 
 import asyncio
@@ -18,7 +18,7 @@ import re
 logger = logging.getLogger(__name__)
 
 class GoogleMapsLeadScraper:
-    """Scraper funcional para Sección Amarilla con extracción perfecta"""
+    """Scraper funcional con lógica de líneas separadas"""
     
     def __init__(self):
         self.session = requests.Session()
@@ -188,62 +188,71 @@ class GoogleMapsLeadScraper:
             return 'Servicios Profesionales'
 
     def _extract_from_business_row(self, row, sector: str) -> Optional[Dict]:
-        """Extraer información - MEJORADO para teléfonos y nombres"""
+        """Extraer información - BASADO EN LÍNEAS SEPARADAS"""
         try:
             name = None
             address = None
             phone = None
             
-            # MÉTODO 1: Buscar por jerarquía de elementos HTML
-            title_elements = row.find_all(['h1', 'h2', 'h3', 'h4'])
-            for title in title_elements:
-                title_text = title.get_text(strip=True)
-                if len(title_text) > 3 and not any(skip in title_text.lower() for skip in ['abierto', 'cerrado', 'ubicación']):
-                    name = self._clean_business_name(title_text)
-                    break
+            # ESTRATEGIA SIMPLE: LÍNEA 1 = NOMBRE, LÍNEA 2 = DIRECCIÓN
+            cells = row.find_all(['td', 'th'])
             
-            # MÉTODO 2: Buscar en celdas si no hay títulos
-            if not name:
-                cells = row.find_all(['td', 'th'])
+            for cell in cells:
+                cell_text = cell.get_text(strip=True)
                 
-                for cell in cells:
-                    cell_text = cell.get_text(strip=True)
+                # Skip celdas vacías o muy cortas
+                if len(cell_text) < 4:
+                    continue
+                
+                # Skip si es solo teléfono
+                if re.match(r'^\(\d+\)', cell_text) or re.match(r'^\d{10}', cell_text):
+                    continue
+                
+                # DIVIDIR POR SALTOS DE LÍNEA
+                lines = cell_text.split('\n')
+                
+                # Limpiar líneas vacías
+                lines = [line.strip() for line in lines if line.strip()]
+                
+                if len(lines) >= 2:
+                    # LÍNEA 1 = NOMBRE (siempre)
+                    potential_name = lines[0].strip()
                     
-                    if len(cell_text) < 4:
-                        continue
+                    # LÍNEA 2 = DIRECCIÓN (si no es teléfono)
+                    potential_address = lines[1].strip()
                     
-                    # Skip teléfonos directos
-                    if re.match(r'^\(\d+\)', cell_text) or re.match(r'^\d{10}', cell_text):
-                        continue
-                    
-                    # Detectar líneas separadas
-                    lines = cell_text.split('\n')
-                    if len(lines) >= 2:
-                        potential_name = lines[0].strip()
-                        potential_address = lines[1].strip()
-                        
-                        if not self._is_address_line(potential_name) and len(potential_name) > 3:
-                            name = self._clean_business_name(potential_name)
-                            if self._is_address_line(potential_address):
+                    # Validar que línea 1 no sea obvio header
+                    if not any(skip in potential_name.lower() for skip in ['nombre', 'estatus', 'acciones']):
+                        # Validar que línea 1 no sea solo teléfono
+                        if not re.match(r'^\(\d+\)', potential_name) and len(potential_name) > 3:
+                            name = potential_name
+                            
+                            # Línea 2 como dirección (si no es teléfono)
+                            if not re.match(r'^\(\d+\)', potential_address):
                                 address = potential_address
+                            
                             break
-                    
-                    # Si no hay líneas separadas, limpiar texto mixto
-                    elif not name:
-                        clean_name = self._clean_business_name(cell_text)
-                        if clean_name and len(clean_name) > 3:
-                            name = clean_name
-                            break
+                
+                # Si no hay líneas múltiples, pero parece nombre único
+                elif len(lines) == 1 and not name:
+                    line = lines[0].strip()
+                    if (len(line) > 3 and 
+                        not re.match(r'^\(\d+\)', line) and
+                        not any(skip in line.lower() for skip in ['nombre', 'estatus', 'acciones'])):
+                        name = line
             
-            # BUSCAR TELÉFONO - MEJORADO
+            # BUSCAR TELÉFONO - Método robusto existente
             phone = self._extract_phone_robust(row)
             
-            # Buscar dirección si no la tenemos
+            # Si no encontramos dirección, buscarla con método backup
             if not address:
                 address = self._extract_address_from_row(row)
             
-            # Solo devolver si tenemos datos válidos
+            # VALIDACIÓN FINAL
             if name and phone and len(name) > 3 and phone != "#ERROR!":
+                # Limpiar nombre de restos de dirección (por si acaso)
+                name = self._final_clean_name(name)
+                
                 return {
                     'name': name,
                     'phone': phone,
@@ -265,88 +274,49 @@ class GoogleMapsLeadScraper:
             logger.error(f"Error extrayendo de fila: {e}")
             return None
 
-    def _clean_business_name(self, text: str) -> Optional[str]:
-        """Limpiar nombre de empresa de direcciones y números"""
+    def _final_clean_name(self, name: str) -> str:
+        """Limpieza final ligera del nombre"""
         try:
-            if not text or len(text) < 3:
-                return None
+            # Solo limpiezas muy básicas
+            clean_name = name.strip()
             
-            # Patrones que indican donde termina el nombre
-            end_patterns = [
-                # Números que indican dirección
-                r'\s+\d{1,4}\s*(?:NO\.|NUM\.|#|LOC|LOCAL)',  # 293, 251 LOC A
-                r'\s+\d{1,4}\s*(?:CALLE|AV\.|COL\.)',       # 293 CALLE
-                r'\s+\d{1,4}\s*(?:MZ|LT)',                  # 8 MZ, 20 LT
-                
-                # Direcciones específicas
-                r'\s+(?:LERMA|ORIENTAL|AGRICOLA)\s+\d+',    # LERMA 293
-                r'\s+(?:CALLE|AV\.|AVENIDA|BLVD)',          # CALLE PRINCIPAL
-                r'\s+(?:COL\.|COLONIA)',                    # COL. CENTRO
-                r'\s+(?:NO\.|NUM\.)\s*\d+',                 # NO. 123
-                r'\s+LOC\s*[A-Z]',                          # LOC A
-                r'\s+LOCAL\s*\d*',                          # LOCAL 5
-                
-                # Ubicaciones específicas mexicanas
-                r'\s+(?:DF|CDMX|MEX|MEXICO)\s*,?\s*C\.?P\.?', # DF, C.P.
-                r'\s+(?:CUAUHTEMOC|BENITO|JUAREZ)',         # Delegaciones
-                
-                # Patrones numéricos al final
-                r'\s+\d{2,4}$',                             # Solo números al final
-            ]
+            # Remover números obvios al final (por si acaso)
+            clean_name = re.sub(r'\s+\d{2,4}$', '', clean_name)
             
-            clean_text = text.strip()
+            # Remover palabras obvias de dirección al final
+            clean_name = re.sub(r'\s+(MZ|LT|NO\.|NUM\.)\s*\d*$', '', clean_name, flags=re.IGNORECASE)
             
-            # Buscar donde cortar el nombre
-            for pattern in end_patterns:
-                match = re.search(pattern, clean_text, re.IGNORECASE)
-                if match:
-                    clean_text = clean_text[:match.start()].strip()
-                    break
+            # Limpiar espacios extra
+            clean_name = re.sub(r'\s+', ' ', clean_name).strip()
             
-            # Limpiezas adicionales
-            clean_text = re.sub(r'\s+Y\s*$', '', clean_text, flags=re.IGNORECASE)  # Y al final
-            clean_text = re.sub(r'\s*,\s*$', '', clean_text)                       # Coma final
-            clean_text = re.sub(r'\s+$', '', clean_text)                           # Espacios finales
-            
-            # Verificar que el resultado sea válido
-            if len(clean_text) >= 3 and not self._is_address_line(clean_text):
-                return clean_text
-            
-            return None
+            return clean_name if len(clean_name) > 3 else name
             
         except Exception as e:
-            return None
+            return name
 
     def _extract_phone_robust(self, row) -> Optional[str]:
-        """Extraer teléfono de forma más robusta"""
+        """Extraer teléfono de forma robusta - SIMPLIFICADO"""
         try:
-            # MÉTODO 1: Buscar enlaces tel: (más confiable)
+            # MÉTODO 1: Enlaces tel: (más confiable)
             phone_links = row.find_all('a', href=re.compile(r'tel:'))
             for link in phone_links:
-                phone = link.get('href').replace('tel:', '').strip()
-                if phone and len(phone) >= 10:
-                    return self._format_phone(phone)
+                phone_raw = link.get('href').replace('tel:', '').strip()
+                if phone_raw and len(phone_raw) >= 10:
+                    return self._format_phone(phone_raw)
             
-            # MÉTODO 2: Buscar en texto de botones o elementos específicos
-            phone_buttons = row.find_all(['button', 'span', 'div'], class_=re.compile(r'phone|tel|contact', re.I))
+            # MÉTODO 2: Buscar en botones con clase de teléfono
+            phone_buttons = row.find_all(['button', 'span', 'div'], class_=re.compile(r'phone|tel', re.I))
             for button in phone_buttons:
-                phone_text = button.get_text(strip=True)
-                phone = self._extract_phone(phone_text)
+                button_text = button.get_text(strip=True)
+                phone = self._extract_phone_simple(button_text)
                 if phone:
                     return phone
             
-            # MÉTODO 3: Buscar en todo el texto de la fila
+            # MÉTODO 3: Buscar en texto general de la fila
             row_text = row.get_text()
-            phone = self._extract_phone(row_text)
+            phone = self._extract_phone_simple(row_text)
             if phone:
                 return phone
-            
-            # MÉTODO 4: Buscar en atributos de datos
-            phone_elements = row.find_all(attrs={'data-phone': True})
-            for elem in phone_elements:
-                phone = elem.get('data-phone', '').strip()
-                if phone:
-                    return self._format_phone(phone)
             
             return None
             
@@ -354,82 +324,47 @@ class GoogleMapsLeadScraper:
             logger.error(f"Error extrayendo teléfono: {e}")
             return None
 
-    def _format_phone(self, phone: str) -> str:
-        """Formatear teléfono de manera consistente"""
-        try:
-            # Limpiar caracteres no numéricos excepto paréntesis y guiones
-            clean_phone = re.sub(r'[^\d\(\)\-]', '', phone)
-            
-            # Si tiene formato (XX)XXXX-XXXX, mantenerlo
-            if re.match(r'\(\d{2,3}\)\d{3,4}-?\d{4}', clean_phone):
-                return clean_phone
-            
-            # Si son solo números, formatear
-            numbers_only = re.sub(r'[^\d]', '', clean_phone)
-            if len(numbers_only) == 10:
-                return f"({numbers_only[:2]}){numbers_only[2:6]}-{numbers_only[6:]}"
-            elif len(numbers_only) == 11:
-                return f"({numbers_only[:3]}){numbers_only[3:7]}-{numbers_only[7:]}"
-            
-            return clean_phone
-            
-        except Exception as e:
-            return phone
-
-    def _extract_phone(self, text: str) -> Optional[str]:
-        """Extraer teléfono del texto - MEJORADO"""
+    def _extract_phone_simple(self, text: str) -> Optional[str]:
+        """Extraer teléfono del texto - VERSIÓN SIMPLE"""
         if not text:
             return None
         
-        # Patrones más específicos para teléfonos mexicanos
+        # Patrones simples para teléfonos mexicanos
         patterns = [
-            r'\(\d{2,3}\)\s*\d{3,4}[-\s]?\d{4}',      # (55)1234-5678 o (555)123-4567
+            r'\(\d{2,3}\)\s*\d{3,4}[-\s]?\d{4}',      # (55)1234-5678
             r'\d{2,3}[-\s]\d{3,4}[-\s]\d{4}',         # 55-1234-5678
-            r'\b\d{10}\b',                             # 5512345678 (exactamente 10 dígitos)
-            r'\b\d{11}\b',                             # 55512345678 (11 dígitos con lada)
+            r'\b\d{10}\b',                             # 5512345678
         ]
         
         for pattern in patterns:
             matches = re.findall(pattern, text)
             for match in matches:
-                # Verificar que no sea un número de dirección o código postal
-                if not re.search(r'(MZ|LT|NO\.|NUM\.|C\.P\.)', text[max(0, text.find(match)-10):text.find(match)+len(match)+10]):
+                # Verificar que no esté cerca de indicadores de dirección
+                match_pos = text.find(match)
+                context = text[max(0, match_pos-15):match_pos+len(match)+15]
+                
+                if not re.search(r'(MZ|LT|NO\.|NUM\.|C\.P\.|CALLE|AV\.)', context, re.IGNORECASE):
                     return self._format_phone(match)
         
         return None
 
-    def _is_address_line(self, text: str) -> bool:
-        """Detectar si una línea es dirección"""
-        address_indicators = [
-            'MZ', 'LT', 'CALLE', 'AV.', 'AVENIDA', 'COL.', 'COLONIA',
-            'NO.', 'NUM.', '#', 'BLVD', 'BOULEVARD', 'C.P.',
-            'GUADALUPE', 'VICTORIA', 'CUAUHTEMOC', 'IZTLAHUACAN',
-            'BARRANCA', 'BELLAVISTA', 'VIVEROS', 'ROSEDAL',
-            'CONJUNTO', 'RESIDENCIAL', 'FRACCIONAMIENTO', 'MONTEBELLO'
-        ]
-        
-        text_upper = text.upper()
-        
-        # Si contiene múltiples indicadores, probablemente es dirección
-        indicator_count = sum(1 for indicator in address_indicators if indicator in text_upper)
-        
-        # Si tiene 2+ indicadores o patrones específicos
-        if indicator_count >= 2:
-            return True
-        
-        # Patrones específicos de direcciones mexicanas
-        patterns = [
-            r'\bMZ\s+\d+',  # MZ 8
-            r'\bLT\s+\d+',  # LT 20
-            r'\b\d+\s+(NO\.|NUM\.)',  # 661 NO.
-            r'\bC\.P\.\s*\d+',  # C.P. 12345
-        ]
-        
-        for pattern in patterns:
-            if re.search(pattern, text_upper):
-                return True
-        
-        return False
+    def _format_phone(self, phone: str) -> str:
+        """Formatear teléfono - VERSIÓN SIMPLE"""
+        try:
+            # Solo números
+            numbers_only = re.sub(r'[^\d]', '', phone)
+            
+            # Formatear según longitud
+            if len(numbers_only) == 10:
+                return f"({numbers_only[:2]}){numbers_only[2:6]}-{numbers_only[6:]}"
+            elif len(numbers_only) == 11:
+                return f"({numbers_only[:3]}){numbers_only[3:7]}-{numbers_only[7:]}"
+            else:
+                # Si no es longitud estándar, devolver limpio
+                return numbers_only if len(numbers_only) >= 10 else phone
+            
+        except Exception as e:
+            return phone
 
     def _extract_from_phone_link(self, link, soup, sector: str) -> Optional[Dict]:
         """Extraer información del enlace de teléfono"""
@@ -442,10 +377,13 @@ class GoogleMapsLeadScraper:
                 name = self._find_business_name_in_container(container)
                 
                 if name and phone:
-                    # Limpiar nombre si contiene dirección
-                    clean_name = self._clean_business_name(name)
-                    if clean_name:
-                        name = clean_name
+                    # Aplicar lógica de líneas si es necesario
+                    if '\n' in name:
+                        lines = [line.strip() for line in name.split('\n') if line.strip()]
+                        if lines:
+                            name = lines[0]  # Solo primera línea
+                    
+                    name = self._final_clean_name(name)
                     
                     return {
                         'name': name,
@@ -503,23 +441,27 @@ class GoogleMapsLeadScraper:
             return '$50,000 - $1,500,000'
 
     def _extract_address_from_row(self, row) -> Optional[str]:
-        """Extraer dirección de la fila - MEJORADO"""
+        """Extraer dirección de la fila - SIMPLIFICADO"""
         try:
-            # Buscar en celdas individuales
             cells = row.find_all(['td', 'th'])
             
             for cell in cells:
-                text = cell.get_text(strip=True)
+                cell_text = cell.get_text(strip=True)
                 
-                # Si la celda es claramente una dirección
-                if self._is_address_line(text):
-                    return text[:100]
+                # Buscar en líneas múltiples
+                lines = cell_text.split('\n')
+                lines = [line.strip() for line in lines if line.strip()]
                 
-                # Si es texto mixto, extraer solo la parte de dirección
-                lines = text.split('\n')
+                # Si hay múltiples líneas, línea 2 podría ser dirección
+                if len(lines) >= 2:
+                    potential_address = lines[1]
+                    if len(potential_address) > 10 and not re.match(r'^\(\d+\)', potential_address):
+                        return potential_address[:100]
+                
+                # Buscar líneas que contengan indicadores de dirección
                 for line in lines:
-                    if self._is_address_line(line.strip()):
-                        return line.strip()[:100]
+                    if any(indicator in line.upper() for indicator in ['MZ', 'LT', 'CALLE', 'AV.', 'COL.']):
+                        return line[:100]
             
             return None
             
