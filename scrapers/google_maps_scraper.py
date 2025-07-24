@@ -77,28 +77,34 @@ class GoogleMapsLeadScraper:
             logger.error(f"Test search failed: {e}")
             return []
 
-        for row in soup.select('div.some-google-row-selector'):
-        # Nombre
-        name_tag = row.select_one('div[role="heading"]')  # selector donde Google pone el nombre
-        name = name_tag.get_text(strip=True) if name_tag else None
-        logger.info(f"🏷️ GoogleMaps: name extraído: {name}")
-
-        # Dirección
-        address_tag = row.select_one('span.section-result-location')  # selector donde está la dirección
-        address = address_tag.get_text(strip=True) if address_tag else None
-        logger.info(f"📍 GoogleMaps: address extraído: {address}")
-
-        # Teléfono u otros datos...
-        phone_tag = row.select_one('span.section-result-phone-number')
-        phone = phone_tag.get_text(strip=True) if phone_tag else None
-
-        leads.append({
-            'name': name,
-            'address': address,
-            'phone': phone,
-            # resto de campos...
-        })
-
+    async def scrape_leads(self, sector: str, location: str, max_leads: int = 10) -> List[Dict]:
+        """Scraping principal de Sección Amarilla"""
+        try:
+            logger.info(f"🎯 Iniciando scraping REAL: {sector} en {location}")
+            
+            all_leads = []
+            categories = self.sector_categories.get(sector, [sector.lower()])
+            
+            # Probar múltiples categorías
+            for category in categories[:3]:
+                try:
+                    logger.info(f"🔍 Buscando categoría: {category}")
+                    
+                    leads_batch = await self._search_seccion_amarilla(category, location, max_leads // 3)
+                    
+                    if leads_batch:
+                        all_leads.extend(leads_batch)
+                        logger.info(f"✅ Encontrados {len(leads_batch)} leads en {category}")
+                    
+                    # Pausa entre búsquedas
+                    await asyncio.sleep(random.uniform(3, 8))
+                    
+                    if len(all_leads) >= max_leads:
+                        break
+                        
+                except Exception as e:
+                    logger.error(f"❌ Error en categoría {category}: {e}")
+                    continue
             
             # Procesar leads
             processed_leads = self._process_leads(all_leads, sector, location)
