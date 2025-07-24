@@ -194,108 +194,33 @@ class GoogleMapsLeadScraper:
             address = None
             phone = None
             
-           # MÉTODO 1: Extraer NOMBRE desde el <a> dentro de <p class="bussines_name">
-name_tag = row.select_one('p.bussines_name a')
-if name_tag:
-    name = name_tag.get_text(strip=True)
-    logger.info(f"🏷️ Nombre extraído de <a>: {name}")
+                      # — MÉTODO 1: Nombre desde el <a> dentro de <p class="bussines_name">
+            name_tag = row.select_one('p.bussines_name a')
+            if name_tag:
+                name = name_tag.get_text(strip=True)
+                logger.info(f"🏷️ Nombre extraído de <a>: {name}")
 
-            # MÉTODO 2: Si no hay span itemprop, buscar en elementos destacados
+            # — MÉTODO 2: Fallback si no hay <a>
             if not name:
-                highlighted_elements = row.find_all(['h1', 'h2', 'h3', 'h4', 'strong', 'b'])
-                for elem in highlighted_elements:
-                    elem_text = elem.get_text(strip=True)
-                    if len(elem_text) > 3 and not any(skip in elem_text.lower() for skip in ['abierto', 'cerrado', 'acciones', 'nombre', 'estatus']):
-                        name = elem_text
-                        logger.info(f"🎯 NOMBRE encontrado en elemento destacado: {name}")
-                        break
-            
-            # MÉTODO 3: Buscar en elementos con clases de nombre
-            if not name:
-                name_elements = row.find_all(['span', 'div'], class_=re.compile(r'business.*name|name|empresa|titulo', re.I))
-                for elem in name_elements:
-                    elem_text = elem.get_text(strip=True)
-                    if len(elem_text) > 3 and not any(skip in elem_text.lower() for skip in ['abierto', 'cerrado', 'acciones']):
-                        name = elem_text
-                        logger.info(f"🎯 NOMBRE encontrado en elemento con clase: {name}")
-                        break
-            
-            # MÉTODO 4: Fallback - Primera línea
-            if not name:
-                cells = row.find_all(['td', 'th'])
-                for cell in cells:
-                    cell_text = cell.get_text(strip=True)
-                    
-                    if len(cell_text) < 4:
-                        continue
-                    
-                    if re.match(r'^\(\d+\)', cell_text) or re.match(r'^\d{10}', cell_text):
-                        continue
-                    
-                    lines = cell_text.split('\n')
-                    lines = [line.strip() for line in lines if line.strip()]
-                    
-                    if len(lines) >= 1:
-                        potential_name = lines[0].strip()
-                        if not any(skip in potential_name.lower() for skip in ['nombre', 'estatus', 'acciones']):
-                            if not re.match(r'^\(\d+\)', potential_name) and len(potential_name) > 3:
-                                name = potential_name
-                                logger.info(f"🎯 NOMBRE encontrado por líneas: {name}")
-                                break
-            # Encontrar todos y quedarnos con el primero visible
-cands = row.find_all('small', class_='short_address')
-for elem in cands:
-    text = elem.get_text(strip=True)
-    if text:
-        address = text
-        logger.info(f"📍 DIRECCIÓN encontrada: {address}")
-        break
-
-            
-            # Si no hay short_address, buscar en otros elementos
-            if not address:
-                # Buscar en elementos con clases de dirección
-                address_elements = row.find_all(['span', 'div', 'small'], class_=re.compile(r'address|direccion|ubicacion|location', re.I))
-                for elem in address_elements:
-                    addr_text = elem.get_text(strip=True)
-                    if len(addr_text) > 10 and not re.match(r'^\(\d+\)', addr_text):
-                        address = addr_text
-                        logger.info(f"📍 DIRECCIÓN encontrada en elemento con clase: {address}")
-                        break
-                
-                # Si no, buscar texto que parezca dirección
-                if not address:
-                    all_elements = row.find_all(['span', 'div', 'small', 'p'])
-                    for elem in all_elements:
-                        # Skip el elemento que usamos para nombre
-                        if elem == name_span:
-                            continue
-                            
-                        elem_text = elem.get_text(strip=True)
-                        if self._looks_like_address(elem_text) and elem_text != name:
-                            address = elem_text
-                            logger.info(f"📍 DIRECCIÓN encontrada por contenido: {address}")
+                for tag in ['h1','h2','h3','h4','strong','b']:
+                    elem = row.find(tag)
+                    if elem:
+                        txt = elem.get_text(strip=True)
+                        if len(txt) > 3 and not any(skip in txt.lower() for skip in ['abierto','cerrado','acciones']):
+                            name = txt
+                            logger.info(f"🎯 Nombre fallback: {name}")
                             break
-                
-                # Fallback: segunda línea de celdas
-                if not address:
-                    cells = row.find_all(['td', 'th'])
-                    for cell in cells:
-                        cell_text = cell.get_text(strip=True)
-                        lines = cell_text.split('\n')
-                        lines = [line.strip() for line in lines if line.strip()]
-                        
-                        if len(lines) >= 2:
-                            potential_address = lines[1].strip()
-                            if (not re.match(r'^\(\d+\)', potential_address) and 
-                                len(potential_address) > 10 and 
-                                potential_address != name):
-                                address = potential_address
-                                logger.info(f"📍 DIRECCIÓN encontrada en segunda línea: {address}")
-                                break
-            
-            # BUSCAR TELÉFONO
+
+            # — DIRECCIÓN desde el <small.short_address> visible
+            address = None
+            address_tag = row.select_one('small.short_address:not(.nodisplay)')
+            if address_tag:
+                address = address_tag.get_text(strip=True)
+                logger.info(f"📍 Dirección extraída: {address}")
+
+            # — TELÉFONO (método robusto existente)
             phone = self._extract_phone_robust(row)
+
             
             # VALIDACIÓN FINAL
             if name and phone and len(name) > 3 and phone != "#ERROR!":
