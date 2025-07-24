@@ -194,12 +194,12 @@ class GoogleMapsLeadScraper:
             address = None
             phone = None
             
-            # MÉTODO 1: Buscar NOMBRE en span itemprop="name"
-            name_span = row.find('span', {'itemprop': 'name'})
-            if name_span:
-                name = name_span.get_text(strip=True)
-                logger.info(f"🎯 NOMBRE encontrado en span itemprop='name': {name}")
-            
+           # MÉTODO 1: Extraer NOMBRE desde el <a> dentro de <p class="bussines_name">
+name_tag = row.select_one('p.bussines_name a')
+if name_tag:
+    name = name_tag.get_text(strip=True)
+    logger.info(f"🏷️ Nombre extraído de <a>: {name}")
+
             # MÉTODO 2: Si no hay span itemprop, buscar en elementos destacados
             if not name:
                 highlighted_elements = row.find_all(['h1', 'h2', 'h3', 'h4', 'strong', 'b'])
@@ -242,12 +242,15 @@ class GoogleMapsLeadScraper:
                                 name = potential_name
                                 logger.info(f"🎯 NOMBRE encontrado por líneas: {name}")
                                 break
-            
-            # BUSCAR DIRECCIÓN en small class="short_address"
-            address_elem = row.find('small', class_='short_address')
-            if address_elem:
-                address = address_elem.get_text(strip=True)
-                logger.info(f"📍 DIRECCIÓN encontrada en small.short_address: {address}")
+            # Encontrar todos y quedarnos con el primero visible
+cands = row.find_all('small', class_='short_address')
+for elem in cands:
+    text = elem.get_text(strip=True)
+    if text:
+        address = text
+        logger.info(f"📍 DIRECCIÓN encontrada: {address}")
+        break
+
             
             # Si no hay short_address, buscar en otros elementos
             if not address:
